@@ -43,6 +43,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/cloudnative-pg/cloudnative-pg/pkg/certs"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/postgres"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/specs"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/specs/pgbouncer"
@@ -75,6 +76,7 @@ type TestingEnvironment struct {
 	PreserveNamespaces []string
 	Log                logr.Logger
 	PostgresVersion    int
+	CertificateOptions certs.Options
 }
 
 // NewTestingEnvironment creates the environment for testing
@@ -87,6 +89,10 @@ func NewTestingEnvironment() (*TestingEnvironment, error) {
 	env.Ctx = context.Background()
 	env.Scheme = runtime.NewScheme()
 	env.Log = ctrl.Log.WithName("e2e")
+	env.CertificateOptions = certs.Options{
+		Duration:               90 * 24 * time.Hour,
+		ExpiringCheckThreshold: 7 * 24 * time.Hour,
+	}
 
 	postgresImage := versions.DefaultImageName
 

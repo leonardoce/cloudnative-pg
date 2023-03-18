@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/cloudnative-pg/cloudnative-pg/internal/configuration"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/certs"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/log"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/utils"
@@ -175,7 +176,7 @@ func (r *ClusterReconciler) verifyCAValidity(secret v1.Secret, cluster *apiv1.Cl
 		Certificate: publicKey,
 	}
 
-	isExpiring, _, err := caPair.IsExpiring()
+	isExpiring, _, err := caPair.IsExpiring(configuration.Current.GetCertificateOptions())
 	if err != nil {
 		return err
 	} else if isExpiring {
@@ -204,7 +205,7 @@ func (r *ClusterReconciler) ensureCASecret(ctx context.Context, cluster *apiv1.C
 		return nil, err
 	}
 
-	caPair, err := certs.CreateRootCA(cluster.Name, cluster.Namespace)
+	caPair, err := certs.CreateRootCA(cluster.Name, cluster.Namespace, configuration.Current.GetCertificateOptions())
 	if err != nil {
 		return nil, fmt.Errorf("while creating the CA of the cluster: %w", err)
 	}
@@ -223,7 +224,7 @@ func (r *ClusterReconciler) renewCASecret(ctx context.Context, secret *v1.Secret
 		return err
 	}
 
-	expiring, _, err := pair.IsExpiring()
+	expiring, _, err := pair.IsExpiring(configuration.Current.GetCertificateOptions())
 	if err != nil {
 		return err
 	}
@@ -236,7 +237,7 @@ func (r *ClusterReconciler) renewCASecret(ctx context.Context, secret *v1.Secret
 		return err
 	}
 
-	err = pair.RenewCertificate(privateKey, nil)
+	err = pair.RenewCertificate(privateKey, nil, configuration.Current.GetCertificateOptions())
 	if err != nil {
 		return err
 	}
@@ -331,7 +332,7 @@ func generateCertificateFromCA(
 		return nil, err
 	}
 
-	serverPair, err := caPair.CreateAndSignPair(commonName, usage, altDNSNames)
+	serverPair, err := caPair.CreateAndSignPair(commonName, usage, altDNSNames, configuration.Current.GetCertificateOptions())
 	if err != nil {
 		return nil, err
 	}
@@ -348,7 +349,7 @@ func (r *ClusterReconciler) renewAndUpdateCertificate(
 	secret *v1.Secret,
 ) error {
 	origSecret := secret.DeepCopy()
-	hasBeenRenewed, err := certs.RenewLeafCertificate(caSecret, secret)
+	hasBeenRenewed, err := certs.RenewLeafCertificate(caSecret, secret, configuration.Current.GetCertificateOptions())
 	if err != nil {
 		return err
 	}

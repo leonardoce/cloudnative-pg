@@ -18,10 +18,16 @@ package certs
 
 import (
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
+
+var testCertificateOptions = Options{
+	Duration:               90 * 24 * time.Hour,
+	ExpiringCheckThreshold: 7 * 24 * time.Hour,
+}
 
 func TestCerts(t *testing.T) {
 	RegisterFailHandler(Fail)

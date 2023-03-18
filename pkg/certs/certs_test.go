@@ -28,7 +28,7 @@ import (
 
 var _ = Describe("Keypair generation", func() {
 	It("should generate a correct root CA", func() {
-		pair, err := CreateRootCA("test", "namespace")
+		pair, err := CreateRootCA("test", "namespace", testCertificateOptions)
 		Expect(err).To(BeNil())
 
 		cert, err := pair.ParseCertificate()
@@ -50,7 +50,7 @@ var _ = Describe("Keypair generation", func() {
 	})
 
 	It("should create a CA K8s corev1/secret resource structure", func() {
-		pair, err := CreateRootCA("test", "namespace")
+		pair, err := CreateRootCA("test", "namespace", testCertificateOptions)
 		Expect(err).To(BeNil())
 
 		secret := pair.GenerateCASecret("namespace", "name")
@@ -62,7 +62,7 @@ var _ = Describe("Keypair generation", func() {
 
 	It("should be able to renew an existing CA certificate", func() {
 		notAfter := time.Now().Add(-10 * time.Hour)
-		notBefore := notAfter.Add(-90 * 24 * time.Hour)
+		notBefore := notAfter.Add(-1 * testCertificateOptions.Duration)
 		ca, err := createCAWithValidity(notBefore, notAfter, nil, nil, "root", "namespace")
 		Expect(err).To(BeNil())
 
@@ -72,7 +72,7 @@ var _ = Describe("Keypair generation", func() {
 		oldCert, err := ca.ParseCertificate()
 		Expect(err).To(BeNil())
 
-		err = ca.RenewCertificate(privateKey, nil)
+		err = ca.RenewCertificate(privateKey, nil, testCertificateOptions)
 		Expect(err).To(BeNil())
 
 		newCert, err := ca.ParseCertificate()
@@ -95,23 +95,23 @@ var _ = Describe("Keypair generation", func() {
 		notBefore := notAfter.Add(-90 * 24 * time.Hour)
 		ca, err := createCAWithValidity(notBefore, notAfter, nil, nil, "root", "namespace")
 		Expect(err).To(BeNil())
-		isExpiring, _, err := ca.IsExpiring()
+		isExpiring, _, err := ca.IsExpiring(testCertificateOptions)
 		Expect(isExpiring, err).To(BeTrue())
 	})
 
 	It("doesn't marks a valid certificate as expiring", func() {
-		ca, err := CreateRootCA("test", "namespace")
+		ca, err := CreateRootCA("test", "namespace", testCertificateOptions)
 		Expect(err).To(BeNil())
-		isExpiring, _, err := ca.IsExpiring()
+		isExpiring, _, err := ca.IsExpiring(testCertificateOptions)
 		Expect(isExpiring, err).To(BeFalse())
 	})
 
 	When("we have a CA generated", func() {
 		It("should successfully generate a leaf certificate", func() {
-			rootCA, err := CreateRootCA("test", "namespace")
+			rootCA, err := CreateRootCA("test", "namespace", testCertificateOptions)
 			Expect(err).To(BeNil())
 
-			pair, err := rootCA.CreateAndSignPair("this.host.name.com", CertTypeServer, nil)
+			pair, err := rootCA.CreateAndSignPair("this.host.name.com", CertTypeServer, nil, testCertificateOptions)
 			Expect(err).To(BeNil())
 
 			cert, err := pair.ParseCertificate()
@@ -137,10 +137,10 @@ var _ = Describe("Keypair generation", func() {
 		})
 
 		It("should create a CA K8s corev1/secret resource structure", func() {
-			rootCA, err := CreateRootCA("test", "namespace")
+			rootCA, err := CreateRootCA("test", "namespace", testCertificateOptions)
 			Expect(err).To(BeNil())
 
-			pair, err := rootCA.CreateAndSignPair("this.host.name.com", CertTypeServer, nil)
+			pair, err := rootCA.CreateAndSignPair("this.host.name.com", CertTypeServer, nil, testCertificateOptions)
 			Expect(err).To(BeNil())
 
 			secret := pair.GenerateCertificateSecret("namespace", "name")
@@ -151,11 +151,11 @@ var _ = Describe("Keypair generation", func() {
 		})
 
 		It("should be able to renew an existing certificate", func() {
-			ca, err := CreateRootCA("test", "namespace")
+			ca, err := CreateRootCA("test", "namespace", testCertificateOptions)
 			Expect(err).To(BeNil())
 
 			notAfter := time.Now().Add(-10 * time.Hour)
-			notBefore := notAfter.Add(-90 * 24 * time.Hour)
+			notBefore := notAfter.Add(-1 * testCertificateOptions.Duration)
 
 			privateKey, err := ca.ParseECPrivateKey()
 			Expect(err).To(BeNil())
@@ -169,7 +169,7 @@ var _ = Describe("Keypair generation", func() {
 			oldCert, err := pair.ParseCertificate()
 			Expect(err).To(BeNil())
 
-			err = pair.RenewCertificate(privateKey, caCert)
+			err = pair.RenewCertificate(privateKey, caCert, testCertificateOptions)
 			Expect(err).To(BeNil())
 
 			newCert, err := pair.ParseCertificate()
@@ -189,10 +189,10 @@ var _ = Describe("Keypair generation", func() {
 		})
 
 		It("should be validated against the right server", func() {
-			rootCA, err := CreateRootCA("test", "namespace")
+			rootCA, err := CreateRootCA("test", "namespace", testCertificateOptions)
 			Expect(err).To(BeNil())
 
-			pair, err := rootCA.CreateAndSignPair("this.host.name.com", CertTypeServer, nil)
+			pair, err := rootCA.CreateAndSignPair("this.host.name.com", CertTypeServer, nil, testCertificateOptions)
 			Expect(err).To(BeNil())
 
 			err = pair.IsValid(rootCA, nil)
@@ -203,7 +203,7 @@ var _ = Describe("Keypair generation", func() {
 			err = pair.IsValid(rootCA, &opts)
 			Expect(err).To(BeNil())
 
-			otherRootCA, err := CreateRootCA("test", "namespace")
+			otherRootCA, err := CreateRootCA("test", "namespace", testCertificateOptions)
 			Expect(err).To(BeNil())
 
 			err = pair.IsValid(otherRootCA, nil)
@@ -211,10 +211,10 @@ var _ = Describe("Keypair generation", func() {
 		})
 
 		It("should be able to handle new lines at the end of server certificates", func() {
-			rootCA, err := CreateRootCA("test", "namespace")
+			rootCA, err := CreateRootCA("test", "namespace", testCertificateOptions)
 			Expect(err).To(BeNil())
 
-			pair, err := rootCA.CreateAndSignPair("this.host.name.com", CertTypeServer, nil)
+			pair, err := rootCA.CreateAndSignPair("this.host.name.com", CertTypeServer, nil, testCertificateOptions)
 			Expect(err).To(BeNil())
 
 			blockServer, intermediatesPEM := pem.Decode(pair.Certificate)
@@ -232,16 +232,16 @@ var _ = Describe("Keypair generation", func() {
 		})
 
 		It("should validate using the full certificate chain", func() {
-			rootCA, err := CreateRootCA("ROOT", "root certificate")
+			rootCA, err := CreateRootCA("ROOT", "root certificate", testCertificateOptions)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			intermediate1, err := rootCA.CreateDerivedCA("L1", "intermediate 1")
+			intermediate1, err := rootCA.CreateDerivedCA("L1", "intermediate 1", testCertificateOptions)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			intermediate2, err := intermediate1.CreateDerivedCA("L2", "intermediate 2")
+			intermediate2, err := intermediate1.CreateDerivedCA("L2", "intermediate 2", testCertificateOptions)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			server, err := intermediate2.CreateAndSignPair("this.host.name.com", CertTypeServer, nil)
+			server, err := intermediate2.CreateAndSignPair("this.host.name.com", CertTypeServer, nil, testCertificateOptions)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			var caBuffer bytes.Buffer

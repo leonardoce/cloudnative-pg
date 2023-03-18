@@ -36,17 +36,11 @@ import (
 )
 
 const (
-	// This is the lifetime of the generated certificates
-	certificateDuration = 90 * 24 * time.Hour
-
 	// This is the PEM block type of elliptic courves private key
 	ecPrivateKeyPEMBlockType = "EC PRIVATE KEY"
 
 	// This is the PEM block type for certificates
 	certificatePEMBlockType = "CERTIFICATE"
-
-	// Threshold to consider a certificate as expiring
-	expiringCheckThreshold = 7 * 24 * time.Hour
 
 	// CACertKey is the key for certificates in a CA secret
 	CACertKey = "ca.crt"
@@ -60,6 +54,16 @@ const (
 	// TLSPrivateKeyKey is the key for the private key field in a CA secret
 	TLSPrivateKeyKey = "tls.key"
 )
+
+// Options are the options that are choosed to create and renew
+// certificates
+type Options struct {
+	// This is the lifetime of the generated certificates
+	Duration time.Duration
+
+	// Threshold to consider a certificate as expiring
+	ExpiringCheckThreshold time.Duration
+}
 
 // CertType represent a certificate type
 type CertType string
@@ -142,9 +146,14 @@ func (pair KeyPair) IsValid(caPair *KeyPair, opts *x509.VerifyOptions) error {
 }
 
 // CreateAndSignPair given a CA keypair, generate and sign a leaf keypair
-func (pair KeyPair) CreateAndSignPair(host string, usage CertType, altDNSNames []string) (*KeyPair, error) {
+func (pair KeyPair) CreateAndSignPair(
+	host string,
+	usage CertType,
+	altDNSNames []string,
+	opts Options,
+) (*KeyPair, error) {
 	notBefore := time.Now().Add(time.Minute * -5)
-	notAfter := notBefore.Add(certificateDuration)
+	notAfter := notBefore.Add(opts.Duration)
 	return pair.createAndSignPairWithValidity(host, notBefore, notAfter, usage, altDNSNames)
 }
 
@@ -256,19 +265,19 @@ func (pair KeyPair) GenerateCertificateSecret(namespace, name string) *v1.Secret
 	}
 }
 
-// RenewCertificate create a new certificate for the embedded private
+// RenewCertificate creates a new certificate for the embedded private
 // key, replacing the existing one. The certificate will be signed
 // with the passed private key and will have as parent the specified
 // parent certificate. If the parent certificate is nil the certificate
 // will be self-signed
-func (pair *KeyPair) RenewCertificate(caPrivateKey *ecdsa.PrivateKey, parentCertificate *x509.Certificate) error {
+func (pair *KeyPair) RenewCertificate(caPrivateKey *ecdsa.PrivateKey, parentCertificate *x509.Certificate, opts Options) error {
 	oldCertificate, err := pair.ParseCertificate()
 	if err != nil {
 		return err
 	}
 
 	notBefore := time.Now().Add(time.Minute * -5)
-	notAfter := notBefore.Add(certificateDuration)
+	notAfter := notBefore.Add(opts.Duration)
 
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
@@ -305,7 +314,7 @@ func (pair *KeyPair) RenewCertificate(caPrivateKey *ecdsa.PrivateKey, parentCert
 }
 
 // IsExpiring check if the certificate will expire in the configured duration
-func (pair *KeyPair) IsExpiring() (bool, *time.Time, error) {
+func (pair *KeyPair) IsExpiring(opts Options) (bool, *time.Time, error) {
 	cert, err := pair.ParseCertificate()
 	if err != nil {
 		return true, nil, err
@@ -314,7 +323,7 @@ func (pair *KeyPair) IsExpiring() (bool, *time.Time, error) {
 	if time.Now().Before(cert.NotBefore) {
 		return true, &cert.NotAfter, nil
 	}
-	if time.Now().Add(expiringCheckThreshold).After(cert.NotAfter) {
+	if time.Now().Add(opts.ExpiringCheckThreshold).After(cert.NotAfter) {
 		return true, &cert.NotAfter, nil
 	}
 
@@ -323,7 +332,7 @@ func (pair *KeyPair) IsExpiring() (bool, *time.Time, error) {
 
 // CreateDerivedCA create a new CA derived from the certificate in the
 // keypair
-func (pair *KeyPair) CreateDerivedCA(commonName string, organizationalUnit string) (*KeyPair, error) {
+func (pair *KeyPair) CreateDerivedCA(commonName string, organizationalUnit string, opts Options) (*KeyPair, error) {
 	certificate, err := pair.ParseCertificate()
 	if err != nil {
 		return nil, err
@@ -335,15 +344,15 @@ func (pair *KeyPair) CreateDerivedCA(commonName string, organizationalUnit strin
 	}
 
 	notBefore := time.Now().Add(time.Minute * -5)
-	notAfter := notBefore.Add(certificateDuration)
+	notAfter := notBefore.Add(opts.Duration)
 
 	return createCAWithValidity(notBefore, notAfter, certificate, key, commonName, organizationalUnit)
 }
 
 // CreateRootCA generates a CA returning its keys
-func CreateRootCA(commonName string, organizationalUnit string) (*KeyPair, error) {
+func CreateRootCA(commonName string, organizationalUnit string, opts Options) (*KeyPair, error) {
 	notBefore := time.Now().Add(time.Minute * -5)
-	notAfter := notBefore.Add(certificateDuration)
+	notAfter := notBefore.Add(opts.Duration)
 	return createCAWithValidity(notBefore, notAfter, nil, nil, commonName, organizationalUnit)
 }
 

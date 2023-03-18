@@ -21,7 +21,9 @@ package configuration
 import (
 	"path"
 	"strings"
+	"time"
 
+	"github.com/cloudnative-pg/cloudnative-pg/pkg/certs"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/configparser"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/log"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/versions"
@@ -31,6 +33,13 @@ var configurationLog = log.WithName("configuration")
 
 // DefaultOperatorPullSecretName is implicitly copied into newly created clusters.
 const DefaultOperatorPullSecretName = "cnpg-pull-secret" // #nosec
+
+// DefaultCertificateDuration is used as default for the certificate duration
+const DefaultCertificateDuration = 90
+
+// DefaultCertificateExpiringCheckThreshold is used as default for the
+// certificates expiration threshold. In days.
+const DefaultCertificateExpiringCheckThreshold = 7
 
 // Data is the struct containing the configuration of the operator.
 // Usually the operator code will use the "Current" configuration.
@@ -84,6 +93,14 @@ type Data struct {
 	// MonitoringQueriesSecret is the name of the secret in the operator namespace which contain
 	// the monitoring queries. The queries will be read from the data key: "queries".
 	MonitoringQueriesSecret string `json:"monitoringQueriesSecret" env:"MONITORING_QUERIES_SECRET"`
+
+	// CertificateDuration is the duration of the automatically generated certificates
+	// in days. Defaults to 90
+	CertificateDuration int `json:"certificateDuration" env:"CERTIFICATE_DURATION"`
+
+	// CertificateExpiringCheckThreshold is the threshold to consider a certificate as expiring
+	// in days. Defauls to 7
+	CertificateExpiringCheckThreshold int `json:"certificateExpiringCheckThreshold" env:"CERTIFICATE_EXPIRING_CHECK_THRESHOLD"`
 }
 
 // Current is the configuration used by the operator
@@ -92,9 +109,11 @@ var Current = NewConfiguration()
 // newDefaultConfig creates a configuration holding the defaults
 func newDefaultConfig() *Data {
 	return &Data{
-		OperatorPullSecretName: DefaultOperatorPullSecretName,
-		OperatorImageName:      versions.DefaultOperatorImageName,
-		PostgresImageName:      versions.DefaultImageName,
+		OperatorPullSecretName:            DefaultOperatorPullSecretName,
+		OperatorImageName:                 versions.DefaultOperatorImageName,
+		PostgresImageName:                 versions.DefaultImageName,
+		CertificateDuration:               DefaultCertificateDuration,
+		CertificateExpiringCheckThreshold: DefaultCertificateExpiringCheckThreshold,
 	}
 }
 
@@ -128,6 +147,15 @@ func (config *Data) IsLabelInherited(name string) bool {
 // each namespace is separated by comma
 func (config *Data) WatchedNamespaces() []string {
 	return cleanNamespaceList(config.WatchNamespace)
+}
+
+// GetCertificateOptions gets the certificate generation and expiring
+// options as expressed in this configuration
+func (config *Data) GetCertificateOptions() certs.Options {
+	return certs.Options{
+		Duration:               time.Duration(config.CertificateDuration) * 24 * time.Hour,
+		ExpiringCheckThreshold: time.Duration(config.CertificateExpiringCheckThreshold) * 24 * time.Hour,
+	}
 }
 
 func cleanNamespaceList(namespaces string) (result []string) {

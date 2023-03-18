@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/cloudnative-pg/cloudnative-pg/internal/configuration"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/certs"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/executablehash"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/log"
@@ -551,7 +552,7 @@ func (r *ClusterReconciler) setCertExpiration(ctx context.Context, cluster *apiv
 	}
 
 	keyPair := certs.KeyPair{Certificate: cert}
-	_, expDate, err := keyPair.IsExpiring()
+	_, expDate, err := keyPair.IsExpiring(configuration.Current.GetCertificateOptions())
 	if err != nil {
 		return err
 	}

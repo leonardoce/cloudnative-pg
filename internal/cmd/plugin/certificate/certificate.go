@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,6 +37,8 @@ type Params struct {
 	Namespace   string
 	User        string
 	ClusterName string
+
+	Duration time.Duration
 }
 
 // Generate generates a Kubernetes secret suitable to allow certificate authentication
@@ -64,7 +67,13 @@ func Generate(ctx context.Context, params Params, dryRun bool, format plugin.Out
 		return err
 	}
 
-	userPair, err := caPair.CreateAndSignPair(params.User, certs.CertTypeClient, nil)
+	userPair, err := caPair.CreateAndSignPair(
+		params.User,
+		certs.CertTypeClient,
+		nil,
+		certs.Options{
+			Duration: params.Duration,
+		})
 	if err != nil {
 		return err
 	}

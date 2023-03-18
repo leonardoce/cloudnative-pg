@@ -116,8 +116,15 @@ var _ = Describe("Backup and restore", Label(tests.LabelBackupRestore), func() {
 				Expect(err).ToNot(HaveOccurred())
 
 				// sign and create secret using CA certificate and key
-				serverPair, err := caPair.CreateAndSignPair("minio-service", certs.CertTypeServer,
-					[]string{"minio-service.internal.mydomain.net, minio-service.default.svc, minio-service.default,"},
+				serverPair, err := caPair.CreateAndSignPair(
+					"minio-service",
+					certs.CertTypeServer,
+					[]string{
+						"minio-service.internal.mydomain.net",
+						"minio-service.default.svc",
+						"minio-service.default",
+					},
+					env.CertificateOptions,
 				)
 				Expect(err).ToNot(HaveOccurred())
 				serverSecret := serverPair.GenerateCertificateSecret(namespace, minioTLSSecName)
@@ -855,8 +862,15 @@ var _ = Describe("Clusters Recovery From Barman Object Store", Label(tests.Label
 				Expect(err).ToNot(HaveOccurred())
 
 				// sign and create secret using CA certificate and key
-				serverPair, err := caPair.CreateAndSignPair("minio-service", certs.CertTypeServer,
-					[]string{"minio-service.internal.mydomain.net, minio-service.default.svc, minio-service.default,"},
+				serverPair, err := caPair.CreateAndSignPair(
+					"minio-service",
+					certs.CertTypeServer,
+					[]string{
+						"minio-service.internal.mydomain.net",
+						"minio-service.default.svc",
+						"minio-service.default",
+					},
+					env.CertificateOptions,
 				)
 				Expect(err).ToNot(HaveOccurred())
 				serverSecret := serverPair.GenerateCertificateSecret(namespace, minioTLSSecName)

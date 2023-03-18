@@ -86,19 +86,22 @@ type PublicKeyInfrastructure struct {
 	// The labelSelector to be used to get the operators deployment,
 	// e.g. "app.kubernetes.io/name=cloudnative-pg"
 	OperatorDeploymentLabelSelector string
+
+	// The certificate generation and renewal configuration
+	CertificateOptions Options
 }
 
 // RenewLeafCertificate renew a secret containing a server
 // certificate given the secret containing the CA that will sign it.
 // Returns true if the certificate has been renewed
-func RenewLeafCertificate(caSecret *v1.Secret, secret *v1.Secret) (bool, error) {
+func RenewLeafCertificate(caSecret *v1.Secret, secret *v1.Secret, opts Options) (bool, error) {
 	// Verify the temporal validity of this CA
 	pair, err := ParseServerSecret(secret)
 	if err != nil {
 		return false, err
 	}
 
-	expiring, _, err := pair.IsExpiring()
+	expiring, _, err := pair.IsExpiring(opts)
 	if err != nil {
 		return false, err
 	}
@@ -122,7 +125,7 @@ func RenewLeafCertificate(caSecret *v1.Secret, secret *v1.Secret) (bool, error) 
 		return false, err
 	}
 
-	err = pair.RenewCertificate(caPrivateKey, caCertificate)
+	err = pair.RenewCertificate(caPrivateKey, caCertificate, opts)
 	if err != nil {
 		return false, err
 	}
@@ -164,7 +167,7 @@ func (pki *PublicKeyInfrastructure) ensureRootCACertificate(
 	err := kubeClient.Get(ctx, types.NamespacedName{Namespace: pki.OperatorNamespace, Name: pki.CaSecretName}, secret)
 	if err == nil {
 		// Verify the temporal validity of this CA and renew the secret if needed
-		secret, err = renewCACertificate(ctx, kubeClient, secret)
+		secret, err = renewCACertificate(ctx, kubeClient, secret, pki.CertificateOptions)
 		if err != nil {
 			return nil, err
 		}
@@ -175,7 +178,7 @@ func (pki *PublicKeyInfrastructure) ensureRootCACertificate(
 	}
 
 	// Let's create the CA
-	pair, err := CreateRootCA(pki.CaSecretName, pki.OperatorNamespace)
+	pair, err := CreateRootCA(pki.CaSecretName, pki.OperatorNamespace, pki.CertificateOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -195,14 +198,14 @@ func (pki *PublicKeyInfrastructure) ensureRootCACertificate(
 
 // renewCACertificate renews a CA certificate if needed, returning the updated
 // secret if the secret has been renewed
-func renewCACertificate(ctx context.Context, kubeClient client.Client, secret *v1.Secret) (*v1.Secret, error) {
+func renewCACertificate(ctx context.Context, kubeClient client.Client, secret *v1.Secret, opts Options) (*v1.Secret, error) {
 	// Verify the temporal validity of this CA
 	pair, err := ParseCASecret(secret)
 	if err != nil {
 		return nil, err
 	}
 
-	expiring, _, err := pair.IsExpiring()
+	expiring, _, err := pair.IsExpiring(opts)
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +218,7 @@ func renewCACertificate(ctx context.Context, kubeClient client.Client, secret *v
 		return nil, err
 	}
 
-	err = pair.RenewCertificate(privateKey, nil)
+	err = pair.RenewCertificate(privateKey, nil, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -333,7 +336,7 @@ func (pki PublicKeyInfrastructure) ensureCertificate(
 	); err == nil {
 		// Verify the temporal validity of this certificate and
 		// renew it if needed
-		return renewServerCertificate(ctx, kubeClient, *caSecret, secret)
+		return renewServerCertificate(ctx, kubeClient, *caSecret, secret, pki.CertificateOptions)
 	} else if !apierrors.IsNotFound(err) {
 		return nil, err
 	}
@@ -348,7 +351,7 @@ func (pki PublicKeyInfrastructure) ensureCertificate(
 		"%v.%v.svc",
 		pki.ServiceName,
 		pki.OperatorNamespace)
-	webhookPair, err := caPair.CreateAndSignPair(webhookHostname, CertTypeServer, nil)
+	webhookPair, err := caPair.CreateAndSignPair(webhookHostname, CertTypeServer, nil, pki.CertificateOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -373,10 +376,14 @@ func (pki PublicKeyInfrastructure) ensureCertificate(
 // renewServerCertificate renews a server certificate if needed
 // Returns the renewed secret or the original one if unchanged
 func renewServerCertificate(
-	ctx context.Context, kubeClient client.Client, caSecret v1.Secret, secret *v1.Secret,
+	ctx context.Context,
+	kubeClient client.Client,
+	caSecret v1.Secret,
+	secret *v1.Secret,
+	opts Options,
 ) (*v1.Secret, error) {
 	origSecret := secret.DeepCopy()
-	hasBeenRenewed, err := RenewLeafCertificate(&caSecret, secret)
+	hasBeenRenewed, err := RenewLeafCertificate(&caSecret, secret, opts)
 	if err != nil {
 		return nil, err
 	}

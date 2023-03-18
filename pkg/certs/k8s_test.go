@@ -26,10 +26,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apiextensionv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
-	controllerScheme "github.com/cloudnative-pg/cloudnative-pg/internal/scheme"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -53,6 +53,7 @@ var (
 			"clusters.postgresql.cnpg.io",
 			"backups.postgresql.cnpg.io",
 		},
+		CertificateOptions: testCertificateOptions,
 	}
 
 	mutatingWebhookTemplate = admissionregistrationv1.MutatingWebhookConfiguration{
@@ -123,7 +124,10 @@ func createFakeOperatorDeployment(ctx context.Context, kubeClient client.Client)
 }
 
 func generateFakeClient() client.Client {
-	scheme := controllerScheme.BuildWithAllKnownScheme()
+	scheme := runtime.NewScheme()
+	_ = clientgoscheme.AddToScheme(scheme)
+	apiextensionv1.AddToScheme(scheme)
+
 	return fake.NewClientBuilder().
 		WithScheme(scheme).
 		Build()
@@ -131,8 +135,9 @@ func generateFakeClient() client.Client {
 
 var _ = Describe("Root CA secret generation", func() {
 	pki := PublicKeyInfrastructure{
-		OperatorNamespace: operatorNamespaceName,
-		CaSecretName:      "ca-secret-name",
+		OperatorNamespace:  operatorNamespaceName,
+		CaSecretName:       "ca-secret-name",
+		CertificateOptions: testCertificateOptions,
 	}
 
 	It("must generate a new CA secret when it doesn't already exist", func(ctx SpecContext) {
@@ -153,7 +158,7 @@ var _ = Describe("Root CA secret generation", func() {
 
 	It("must adopt the current certificate if it is valid", func(ctx SpecContext) {
 		kubeClient := generateFakeClient()
-		ca, err := CreateRootCA("ca-secret-name", operatorNamespaceName)
+		ca, err := CreateRootCA("ca-secret-name", operatorNamespaceName, testCertificateOptions)
 		Expect(err).To(BeNil())
 
 		secret := ca.GenerateCASecret(operatorNamespaceName, "ca-secret-name")
@@ -169,7 +174,7 @@ var _ = Describe("Root CA secret generation", func() {
 	It("must renew the CA certificate if it is not valid", func(ctx SpecContext) {
 		kubeClient := generateFakeClient()
 		notAfter := time.Now().Add(-10 * time.Hour)
-		notBefore := notAfter.Add(-90 * 24 * time.Hour)
+		notBefore := notAfter.Add(-1 * testCertificateOptions.Duration)
 		ca, err := createCAWithValidity(notBefore, notAfter,
 			nil, nil, "root", operatorNamespaceName)
 		Expect(err).To(BeNil())
@@ -206,7 +211,7 @@ var _ = Describe("Webhook certificate validation", func() {
 			err := createFakeOperatorDeployment(ctx, kubeClient)
 			Expect(err).To(BeNil())
 
-			ca, _ := CreateRootCA("ca-secret-name", operatorNamespaceName)
+			ca, _ := CreateRootCA("ca-secret-name", operatorNamespaceName, testCertificateOptions)
 			caSecret = ca.GenerateCASecret(operatorNamespaceName, "ca-secret-name")
 			err = kubeClient.Create(ctx, caSecret)
 			Expect(err).To(BeNil())
@@ -238,7 +243,7 @@ var _ = Describe("Webhook certificate validation", func() {
 			err := createFakeOperatorDeployment(ctx, kubeClient)
 			Expect(err).To(BeNil())
 
-			ca, _ := CreateRootCA("ca-secret-name", operatorNamespaceName)
+			ca, _ := CreateRootCA("ca-secret-name", operatorNamespaceName, testCertificateOptions)
 
 			caSecret = ca.GenerateCASecret(operatorNamespaceName, "ca-secret-name")
 			err = kubeClient.Create(ctx, caSecret)
@@ -264,7 +269,7 @@ var _ = Describe("Webhook certificate validation", func() {
 			err := createFakeOperatorDeployment(ctx, kubeClient)
 			Expect(err).To(BeNil())
 
-			ca, _ := CreateRootCA("ca-secret-name", operatorNamespaceName)
+			ca, _ := CreateRootCA("ca-secret-name", operatorNamespaceName, testCertificateOptions)
 			caSecret = ca.GenerateCASecret(operatorNamespaceName, "ca-secret-name")
 
 			notAfter := time.Now().Add(-10 * time.Hour)
@@ -300,9 +305,9 @@ var _ = Describe("TLS certificates injection", func() {
 	pki := pkiEnvironmentTemplate
 
 	// Create a CA and the pki secret
-	ca, _ := CreateRootCA("ca-secret-name", operatorNamespaceName)
+	ca, _ := CreateRootCA("ca-secret-name", operatorNamespaceName, testCertificateOptions)
 	// TODO: caSecret := ca.GenerateCASecret(operatorNamespaceName, "ca-secret-name")
-	webhookPair, _ := ca.CreateAndSignPair("pki-service.operator-namespace.svc", CertTypeServer, nil)
+	webhookPair, _ := ca.CreateAndSignPair("pki-service.operator-namespace.svc", CertTypeServer, nil, testCertificateOptions)
 	webhookSecret := webhookPair.GenerateCertificateSecret(pki.OperatorNamespace, pki.SecretName)
 
 	kubeClient := generateFakeClient()

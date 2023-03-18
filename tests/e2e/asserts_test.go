@@ -1201,8 +1201,11 @@ func CreateAndAssertServerCertificatesSecrets(
 	cluster, caPair, err := testsUtils.CreateSecretCA(namespace, clusterName, caSecName, includeCAPrivateKey, env)
 	Expect(err).ToNot(HaveOccurred())
 
-	serverPair, err := caPair.CreateAndSignPair(cluster.GetServiceReadWriteName(), certs.CertTypeServer,
+	serverPair, err := caPair.CreateAndSignPair(
+		cluster.GetServiceReadWriteName(),
+		certs.CertTypeServer,
 		cluster.GetClusterAltDNSNames(),
+		env.CertificateOptions,
 	)
 	Expect(err).ToNot(HaveOccurred())
 	serverSecret := serverPair.GenerateCertificateSecret(namespace, tlsSecName)
@@ -1217,7 +1220,7 @@ func CreateAndAssertClientCertificatesSecrets(
 	Expect(err).ToNot(HaveOccurred())
 
 	// Sign tls certificates for streaming_replica user
-	serverPair, err := caPair.CreateAndSignPair("streaming_replica", certs.CertTypeClient, nil)
+	serverPair, err := caPair.CreateAndSignPair("streaming_replica", certs.CertTypeClient, nil, env.CertificateOptions)
 	Expect(err).ToNot(HaveOccurred())
 
 	serverSecret := serverPair.GenerateCertificateSecret(namespace, tlsSecName)
@@ -1225,7 +1228,7 @@ func CreateAndAssertClientCertificatesSecrets(
 	Expect(err).ToNot(HaveOccurred())
 
 	// Creating 'app' user tls certificates to validate connection from psql client
-	serverPair, err = caPair.CreateAndSignPair("app", certs.CertTypeClient, nil)
+	serverPair, err = caPair.CreateAndSignPair("app", certs.CertTypeClient, nil, env.CertificateOptions)
 	Expect(err).ToNot(HaveOccurred())
 
 	serverSecret = serverPair.GenerateCertificateSecret(namespace, userSecName)

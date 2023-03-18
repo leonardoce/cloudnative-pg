@@ -18,6 +18,7 @@ package certificate
 
 import (
 	"context"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -41,12 +42,14 @@ connect to the PostgreSQL cluster.`,
 			cluster, _ := cmd.Flags().GetString("cnpg-cluster")
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
 			output, _ := cmd.Flags().GetString("output")
+			duration, _ := cmd.Flags().GetDuration("duration")
 
 			params := Params{
 				Name:        secretName,
 				Namespace:   plugin.Namespace,
 				User:        user,
 				ClusterName: cluster,
+				Duration:    duration,
 			}
 
 			return Generate(ctx, params, dryRun, plugin.OutputFormat(output))
@@ -63,6 +66,8 @@ connect to the PostgreSQL cluster.`,
 		"output", "o", "", "Output format. One of json|yaml")
 	certificateCmd.Flags().Bool(
 		"dry-run", false, "If specified, the secret is not created")
+	certificateCmd.Flags().Duration(
+		"duration", 90*24*time.Hour, "The duration of the certificate")
 
 	return certificateCmd
 }
