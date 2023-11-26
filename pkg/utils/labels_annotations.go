@@ -122,6 +122,10 @@ const (
 	// PodSpecAnnotationName is the name of the annotation with the PodSpec derived from the cluster
 	PodSpecAnnotationName = MetadataNamespace + "/podSpec"
 
+	// BackupAdapterAnnotationName is the name of the annotation storing the configuration of the
+	// backup adapter
+	BackupAdapterAnnotationName = MetadataNamespace + "/backupAdapter"
+
 	// ClusterManifestAnnotationName is the name of the annotation containing the cluster manifest
 	ClusterManifestAnnotationName = MetadataNamespace + "/clusterManifest"
 

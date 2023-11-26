@@ -404,6 +404,15 @@ func PodWithExistingStorage(cluster apiv1.Cluster, nodeSerial int) *corev1.Pod {
 		pod.Annotations[utils.PodSpecAnnotationName] = string(podSpecMarshaled)
 	}
 
+	if cluster.Spec.Backup != nil && cluster.Spec.Backup.Adapter != nil {
+		content, err := json.Marshal(cluster.Spec.Backup.Adapter)
+		if err != nil {
+			panic(err)
+		}
+
+		pod.Annotations[utils.BackupAdapterAnnotationName] = string(content)
+	}
+
 	if cluster.Spec.PriorityClassName != "" {
 		pod.Spec.PriorityClassName = cluster.Spec.PriorityClassName
 	}

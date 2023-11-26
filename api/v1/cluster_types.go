@@ -1902,6 +1902,10 @@ type BackupConfiguration struct {
 	// +optional
 	BarmanObjectStore *BarmanObjectStoreConfiguration `json:"barmanObjectStore,omitempty"`
 
+	// The configuration for an external backup adapter
+	// +optional
+	Adapter *AdapterConfiguration `json:"adapter,omitempty"`
+
 	// RetentionPolicy is the retention policy to be used for backups
 	// and WALs (i.e. '60d'). The retention policy is expressed in the form
 	// of `XXu` where `XX` is a positive integer and `u` is in `[dwm]` -
@@ -1919,6 +1923,16 @@ type BackupConfiguration struct {
 	// +kubebuilder:default:=prefer-standby
 	// +optional
 	Target BackupTarget `json:"target,omitempty"`
+}
+
+// AdapterConfiguration contains the configuration for an external backup adapter
+type AdapterConfiguration struct {
+	// Id is the adapter ID, used by the injector
+	ID string `json:"id"`
+
+	// Parameters contains the configuration of the backup adapter
+	// +optional
+	Parameters map[string]string `json:"parameters,omitempty"`
 }
 
 // WalBackupConfiguration is the configuration of the backup of the

@@ -954,6 +954,21 @@ spec:
               backup:
                 description: The configuration to be used for backups
                 properties:
+                  adapter:
+                    description: The configuration for an external backup adapter
+                    properties:
+                      id:
+                        description: Id is the adapter ID, used by the injector
+                        type: string
+                      parameters:
+                        additionalProperties:
+                          type: string
+                        description: Parameters contains the configuration of the
+                          backup adapter
+                        type: object
+                    required:
+                    - id
+                    type: object
                   barmanObjectStore:
                     description: The configuration for the barman-cloud tool suite
                     properties:

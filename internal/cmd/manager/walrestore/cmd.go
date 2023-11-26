@@ -22,12 +22,15 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"strings"
 	"time"
 
+	"github.com/leonardoce/backup-adapter/pkg/adapter"
 	"github.com/spf13/cobra"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/cloudnative-pg/cloudnative-pg/internal/management/adapterclient"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/management/cache"
 	cacheClient "github.com/cloudnative-pg/cloudnative-pg/internal/management/cache/client"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/barman"
@@ -109,6 +112,43 @@ func run(ctx context.Context, podName string, args []string) error {
 	cluster, err = cacheClient.GetCluster()
 	if err != nil {
 		return fmt.Errorf("failed to get cluster: %w", err)
+	}
+
+	if cluster.Spec.Backup.Adapter != nil {
+		cli, err := adapterclient.NewClient()
+		if err != nil {
+			contextLog.Error(err, "Error while connecting to backup adapter client",
+				"adapter", cluster.Spec.Backup.Adapter)
+			return err
+		}
+
+		defer func() {
+			closeErr := cli.Close()
+			if closeErr != nil {
+				contextLog.Error(closeErr, "Error while closing connection to backup adapter client",
+					"adapter", cluster.Spec.Backup.Adapter)
+			}
+		}()
+
+		pgData := path.Join(os.Getenv("PGDATA"))
+
+		_, err = cli.Client().RestoreWal(ctx, &adapter.RestoreWalRequest{
+			ClusterName:         cluster.Name,
+			SourceWalName:       walName,
+			DestinationFileName: path.Join(pgData, destinationPath),
+			Parameters:          cluster.Spec.Backup.Adapter.Parameters,
+		})
+		return err
+	}
+
+	if cluster.Spec.Backup.BarmanObjectStore == nil {
+		// Backup not configured, skipping WAL
+		contextLog.Info("Barman backup not configured, skip WAL archiving",
+			"walName", walName,
+			"currentPrimary", cluster.Status.CurrentPrimary,
+			"targetPrimary", cluster.Status.TargetPrimary,
+		)
+		return nil
 	}
 
 	recoverClusterName, recoverEnv, barmanConfiguration, err := GetRecoverConfiguration(cluster, podName)

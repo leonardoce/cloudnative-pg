@@ -5,5 +5,11 @@ metadata:
 spec:
   instances: 3
 
+  backup:
+    adapter:
+      id: filepath.leonardoce.io
+      parameters:
+        pvcName: backups-pvc
+
   storage:
     size: 1Gi

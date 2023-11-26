@@ -28,10 +28,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/leonardoce/backup-adapter/pkg/adapter"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/cloudnative-pg/cloudnative-pg/internal/management/adapterclient"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/management/cache"
 	cacheClient "github.com/cloudnative-pg/cloudnative-pg/internal/management/cache/client"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/conditions"
@@ -138,7 +140,7 @@ func run(
 	contextLog := log.FromContext(ctx)
 	walName := args[0]
 
-	if cluster.Spec.Backup == nil || cluster.Spec.Backup.BarmanObjectStore == nil {
+	if cluster.Spec.Backup == nil {
 		// Backup not configured, skipping WAL
 		contextLog.Info("Backup not configured, skip WAL archiving",
 			"walName", walName,
@@ -167,6 +169,40 @@ func run(
 			"targetPrimary", cluster.Status.TargetPrimary,
 			"podName", podName)
 		return errSwitchoverInProgress
+	}
+
+	if cluster.Spec.Backup.Adapter != nil {
+		cli, err := adapterclient.NewClient()
+		if err != nil {
+			contextLog.Error(err, "Error while connecting to backup adapter client",
+				"adapter", cluster.Spec.Backup.Adapter)
+			return err
+		}
+
+		defer func() {
+			closeErr := cli.Close()
+			if closeErr != nil {
+				contextLog.Error(closeErr, "Error while closing connection to backup adapter client",
+					"adapter", cluster.Spec.Backup.Adapter)
+			}
+		}()
+
+		_, err = cli.Client().ArchiveWal(ctx, &adapter.ArchiveWalRequest{
+			ClusterName:    cluster.Name,
+			SourceFileName: path.Join(pgData, args[0]),
+			Parameters:     cluster.Spec.Backup.Adapter.Parameters,
+		})
+		return err
+	}
+
+	if cluster.Spec.Backup.BarmanObjectStore == nil {
+		// Backup not configured, skipping WAL
+		contextLog.Info("Barman backup not configured, skip WAL archiving",
+			"walName", walName,
+			"currentPrimary", cluster.Status.CurrentPrimary,
+			"targetPrimary", cluster.Status.TargetPrimary,
+		)
+		return nil
 	}
 
 	maxParallel := 1
