@@ -7,7 +7,7 @@ spec:
 
   backup:
     adapter:
-      id: filepath.leonardoce.io
+      id: pgbackrest.leonardoce.io
       parameters:
         pvcName: backups-pvc
 
