@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/cloudnative-pg/cloudnative-pg/internal/management/adapterclient"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/conditions"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/fileutils"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/barman"
@@ -45,6 +46,7 @@ import (
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/postgres"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/resources"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/utils"
+	"github.com/leonardoce/backup-adapter/pkg/adapter"
 
 	// this is needed to correctly open the sql connection with the pgx driver
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -77,9 +79,14 @@ func NewBackupCommand(
 	instance *Instance,
 	log log.Logger,
 ) (*BackupCommand, error) {
-	capabilities, err := barmanCapabilities.CurrentCapabilities()
-	if err != nil {
-		return nil, err
+	var capabilities *barmanCapabilities.Capabilities
+
+	if cluster.Spec.Backup.BarmanObjectStore != nil {
+		var err error
+		capabilities, err = barmanCapabilities.CurrentCapabilities()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &BackupCommand{
@@ -187,8 +194,10 @@ func (b *BackupCommand) getBarmanCloudBackupOptions(
 // Start initiates a backup for this instance using
 // barman-cloud-backup
 func (b *BackupCommand) Start(ctx context.Context) error {
-	if err := b.ensureBarmanCompatibility(); err != nil {
-		return err
+	if b.Cluster.Spec.Backup.Adapter == nil {
+		if err := b.ensureBarmanCompatibility(); err != nil {
+			return err
+		}
 	}
 
 	b.setupBackupStatus()
@@ -212,18 +221,22 @@ func (b *BackupCommand) Start(ctx context.Context) error {
 		}
 	}
 
-	b.Env, err = barmanCredentials.EnvSetBackupCloudCredentials(
-		ctx,
-		b.Client,
-		b.Cluster.Namespace,
-		b.Cluster.Spec.Backup.BarmanObjectStore,
-		b.Env)
-	if err != nil {
-		return fmt.Errorf("cannot recover backup credentials: %w", err)
-	}
+	if b.Cluster.Spec.Backup.BarmanObjectStore != nil {
+		b.Env, err = barmanCredentials.EnvSetBackupCloudCredentials(
+			ctx,
+			b.Client,
+			b.Cluster.Namespace,
+			b.Cluster.Spec.Backup.BarmanObjectStore,
+			b.Env)
+		if err != nil {
+			return fmt.Errorf("cannot recover backup credentials: %w", err)
+		}
 
-	// Run the actual backup process
-	go b.run(ctx)
+		// Run the actual backup process
+		go b.run(ctx)
+	} else {
+		go b.runAdapter(ctx)
+	}
 
 	return nil
 }
@@ -296,6 +309,87 @@ func (b *BackupCommand) run(ctx context.Context) {
 	}
 
 	b.backupMaintenance(ctx)
+}
+
+// run executes the backup via the cnpg plugin command and updates the status
+// This method will take long time and is supposed to run inside a dedicated
+// goroutine.
+func (b *BackupCommand) runAdapter(ctx context.Context) {
+	cli, err := adapterclient.NewClient()
+	if err != nil {
+		log.Error(
+			err,
+			"Error while connecting to backup adapter client",
+			"adapter", b.Cluster.Spec.Backup.Adapter,
+		)
+		return
+	}
+
+	defer func() {
+		closeErr := cli.Close()
+		if closeErr != nil {
+			log.Error(
+				closeErr,
+				"Error while closing connection to backup adapter client",
+				"adapter", b.Cluster.Spec.Backup.Adapter,
+			)
+		}
+	}()
+
+	isPrimary, err := b.Instance.IsPrimary()
+	if err != nil {
+		log.Error(
+			err,
+			"Cannot detect if the cluster is primary or not, defaulting to standby",
+		)
+		isPrimary = false
+	}
+
+	result, err := cli.BackupManagerClient().Backup(ctx, &adapter.BackupRequest{
+		ClusterName: b.Cluster.Name,
+		IsPrimary:   isPrimary,
+	})
+	if err == nil {
+		b.Log.Info("Backup completed")
+		b.Recorder.Event(b.Backup, "Normal", "Completed", fmt.Sprintf("Backup completed: %v", result.Info))
+
+		// Set the status to completed
+		b.Backup.Status.SetAsCompleted()
+	} else {
+		log.Error(
+			err,
+			"Error while requesting a new backup",
+			"adapter", b.Cluster.Spec.Backup.Adapter,
+		)
+
+		backupStatus := b.Backup.GetStatus()
+
+		// record the failure
+		b.Log.Error(err, "Backup failed")
+		b.Recorder.Event(b.Backup, "Normal", "Failed", "Backup failed")
+
+		// update backup status as failed
+		backupStatus.SetAsFailed(err)
+		if err := PatchBackupStatusAndRetry(ctx, b.Client, b.Backup); err != nil {
+			b.Log.Error(err, "Can't mark backup as failed")
+			// We do not terminate here because we still want to do the maintenance
+			// activity on the backups and to set the condition on the cluster.
+		}
+
+		// add backup failed condition to the cluster
+		if failErr := b.retryWithRefreshedCluster(ctx, func() error {
+			origCluster := b.Cluster.DeepCopy()
+
+			meta.SetStatusCondition(&b.Cluster.Status.Conditions, *apiv1.BuildClusterBackupFailedCondition(err))
+
+			b.Cluster.Status.LastFailedBackup = utils.GetCurrentTimestampWithFormat(time.RFC3339)
+			return b.Client.Status().Patch(ctx, b.Cluster, client.MergeFrom(origCluster))
+		}); failErr != nil {
+			b.Log.Error(failErr, "while setting cluster condition for failed backup")
+			// We do not terminate here because it's more important to properly handle
+			// the backup maintenance activity than putting a condition in the cluster
+		}
+	}
 }
 
 func (b *BackupCommand) takeBackup(ctx context.Context) error {

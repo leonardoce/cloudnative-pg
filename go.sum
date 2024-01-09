@@ -133,6 +133,8 @@ github.com/leonardoce/backup-adapter v0.0.0-20231126100111-31cb35182461 h1:GCVeQ
 github.com/leonardoce/backup-adapter v0.0.0-20231126100111-31cb35182461/go.mod h1:Q3XGOT+ao4QuEvU2zjYlwIcZFH7NciAQ0U7Q8o0+xLw=
 github.com/leonardoce/backup-adapter v0.0.0-20240108165657-48abc6be3857 h1:wV79Fgba1mV3pOW63IrSZvAnxb1U0bpH3sZo+bd4x7s=
 github.com/leonardoce/backup-adapter v0.0.0-20240108165657-48abc6be3857/go.mod h1:Q3XGOT+ao4QuEvU2zjYlwIcZFH7NciAQ0U7Q8o0+xLw=
+github.com/leonardoce/backup-adapter v0.0.0-20240109101859-fc3d9090208b h1:Bdm9UlRP5I9aq6IGdC+7lPA6SnTHn411KEO8ZirAe/o=
+github.com/leonardoce/backup-adapter v0.0.0-20240109101859-fc3d9090208b/go.mod h1:Q3XGOT+ao4QuEvU2zjYlwIcZFH7NciAQ0U7Q8o0+xLw=
 github.com/lib/pq v1.10.9 h1:YXG7RB+JIjhP29X+OtkiDnYaXQwpS4JEWq7dtCCRUEw=
 github.com/lib/pq v1.10.9/go.mod h1:AlVN5x4E4T544tWzH6hKfbfQvm3HdbOxrmggDNAPY9o=
 github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de h1:9TO3cAIGXtEhnIaL+V+BEER86oLrvS+kWobKpbJuye0=
