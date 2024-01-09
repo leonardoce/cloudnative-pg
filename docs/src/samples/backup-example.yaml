@@ -4,4 +4,4 @@ metadata:
   name: pg-backup-example
 spec:
   cluster:
-    name: pg-backup
+    name: cluster-example

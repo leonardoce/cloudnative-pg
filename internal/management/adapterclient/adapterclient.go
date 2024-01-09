@@ -44,9 +44,11 @@ func NewClient() (*AdapterClient, error) {
 	}
 
 	walManagerClient := adapter.NewWalManagerClient(conn)
+	backupManagerClient := adapter.NewBackupManagerClient(conn)
 	return &AdapterClient{
-		conn:             conn,
-		walManagerClient: walManagerClient,
+		conn:                conn,
+		walManagerClient:    walManagerClient,
+		backupManagerClient: backupManagerClient,
 	}, nil
 }
 

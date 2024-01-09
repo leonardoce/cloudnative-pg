@@ -195,7 +195,7 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			"cluster", cluster.Name,
 			"pod", pod.Name)
 
-		if cluster.Spec.Backup.BarmanObjectStore == nil {
+		if cluster.Spec.Backup.BarmanObjectStore == nil && cluster.Spec.Backup.Adapter == nil {
 			tryFlagBackupAsFailed(ctx, r.Client, &backup,
 				errors.New("no barmanObjectStore section defined on the target cluster"))
 			return ctrl.Result{}, nil
