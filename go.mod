@@ -15,7 +15,7 @@ require (
 	github.com/jackc/pgx/v5 v5.5.1
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51
 	github.com/kubernetes-csi/external-snapshotter/client/v6 v6.3.0
-	github.com/leonardoce/backup-adapter v0.0.0-20231126100111-31cb35182461
+	github.com/leonardoce/backup-adapter v0.0.0-20240108165657-48abc6be3857
 	github.com/lib/pq v1.10.9
 	github.com/logrusorgru/aurora/v4 v4.0.0
 	github.com/mitchellh/go-ps v1.0.0

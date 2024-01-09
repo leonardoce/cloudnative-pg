@@ -28,11 +28,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/cloudnative-pg/cloudnative-pg/internal/management/adapterclient"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/management/cache"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/log"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/postgres"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/url"
+	"github.com/leonardoce/backup-adapter/pkg/adapter"
 )
 
 type localWebserverEndpoints struct {
@@ -157,6 +159,47 @@ func (ws *localWebserverEndpoints) requestBackup(w http.ResponseWriter, r *http.
 		http.Error(
 			w,
 			fmt.Sprintf("error while getting backup: %v", err.Error()),
+			http.StatusInternalServerError)
+		return
+	}
+
+	if cluster.Spec.Backup.Adapter != nil {
+		cli, err := adapterclient.NewClient()
+		if err != nil {
+			log.Error(
+				err,
+				"Error while connecting to backup adapter client",
+				"adapter", cluster.Spec.Backup.Adapter,
+			)
+			http.Error(
+				w,
+				fmt.Sprintf("error connecting to backup adapter client: %v", err.Error()),
+				http.StatusInternalServerError)
+			return
+		}
+
+		defer func() {
+			closeErr := cli.Close()
+			if closeErr != nil {
+				log.Error(
+					closeErr,
+					"Error while closing connection to backup adapter client",
+					"adapter", cluster.Spec.Backup.Adapter,
+				)
+			}
+		}()
+
+		_, err = cli.BackupManagerClient().Backup(ctx, &adapter.BackupRequest{
+			ClusterName: cluster.Name,
+		})
+		log.Error(
+			err,
+			"Error while requesting a new backup",
+			"adapter", cluster.Spec.Backup.Adapter,
+		)
+		http.Error(
+			w,
+			fmt.Sprintf("error connecting requesting a new backup: %v", err.Error()),
 			http.StatusInternalServerError)
 		return
 	}

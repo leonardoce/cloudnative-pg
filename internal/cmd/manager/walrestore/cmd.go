@@ -132,7 +132,7 @@ func run(ctx context.Context, podName string, args []string) error {
 
 		pgData := path.Join(os.Getenv("PGDATA"))
 
-		_, err = cli.Client().RestoreWal(ctx, &adapter.RestoreWalRequest{
+		_, err = cli.WalManagerClient().RestoreWal(ctx, &adapter.RestoreWalRequest{
 			ClusterName:         cluster.Name,
 			SourceWalName:       walName,
 			DestinationFileName: path.Join(pgData, destinationPath),

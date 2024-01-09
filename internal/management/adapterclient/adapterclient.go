@@ -30,8 +30,9 @@ const (
 
 // AdapterClient represent a client for the WAL management sidecas
 type AdapterClient struct {
-	conn   *grpc.ClientConn
-	client adapter.WalManagerClient
+	conn                *grpc.ClientConn
+	walManagerClient    adapter.WalManagerClient
+	backupManagerClient adapter.BackupManagerClient
 }
 
 // NewClient creates a new adapter client
@@ -42,10 +43,10 @@ func NewClient() (*AdapterClient, error) {
 		log.Fatalf("did not connect: %v", err)
 	}
 
-	client := adapter.NewWalManagerClient(conn)
+	walManagerClient := adapter.NewWalManagerClient(conn)
 	return &AdapterClient{
-		conn:   conn,
-		client: client,
+		conn:             conn,
+		walManagerClient: walManagerClient,
 	}, nil
 }
 
@@ -54,7 +55,12 @@ func (cli *AdapterClient) Close() error {
 	return cli.conn.Close()
 }
 
-// Client returns the client interface
-func (cli *AdapterClient) Client() adapter.WalManagerClient {
-	return cli.client
+// WalManagerClient returns the WAL management client interface
+func (cli *AdapterClient) WalManagerClient() adapter.WalManagerClient {
+	return cli.walManagerClient
+}
+
+// BackupManagerClient returns the WAL management client interface
+func (cli *AdapterClient) BackupManagerClient() adapter.BackupManagerClient {
+	return cli.backupManagerClient
 }

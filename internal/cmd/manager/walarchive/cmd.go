@@ -187,7 +187,7 @@ func run(
 			}
 		}()
 
-		_, err = cli.Client().ArchiveWal(ctx, &adapter.ArchiveWalRequest{
+		_, err = cli.WalManagerClient().ArchiveWal(ctx, &adapter.ArchiveWalRequest{
 			ClusterName:    cluster.Name,
 			SourceFileName: path.Join(pgData, args[0]),
 			Parameters:     cluster.Spec.Backup.Adapter.Parameters,
