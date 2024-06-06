@@ -1,3 +1,8 @@
+FROM golang:1.22-bookworm AS delve
+
+# Install the latest version of Delve
+RUN CGO_ENABLED=0 go install github.com/go-delve/delve/cmd/dlv@latest
+
 # This builder stage it's only because we need a command
 # to create a symlink and reduce the size of the image
 FROM gcr.io/distroless/static-debian12:debug-nonroot as builder
@@ -25,6 +30,9 @@ LABEL summary="$SUMMARY" \
       release="1"
 
 WORKDIR /
+
+# Copy delve
+COPY --from=delve /go/bin/dlv /dlv
 
 # Needs to copy the entire content, otherwise, it will not
 # copy the symlink properly.

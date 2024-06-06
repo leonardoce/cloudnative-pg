@@ -34,10 +34,17 @@ spec:
           type: RuntimeDefault
       containers:
       - command:
-        - /manager
+        - "/dlv"
         args:
-        - controller
-        - --leader-elect
+        - "--listen=:40000"
+        - "--headless=true"
+        - "--api-version=2"
+        - "--continue"
+        - "--accept-multiclient"
+        - "--log"
+        - "exec"
+        - "/manager"
+        - "--"
         - --config-map-name=$(OPERATOR_DEPLOYMENT_NAME)-config
         - --secret-name=$(OPERATOR_DEPLOYMENT_NAME)-config
         - --webhook-port=9443
@@ -56,18 +63,6 @@ spec:
               fieldPath: metadata.namespace
         - name: MONITORING_QUERIES_CONFIGMAP
           value: $(DEFAULT_MONITORING_CONFIGMAP)
-        resources:
-          limits:
-            cpu: 100m
-            memory: 200Mi
-          requests:
-            cpu: 100m
-            memory: 100Mi
-        livenessProbe:
-          httpGet:
-            port: 9443
-            scheme: HTTPS
-            path: /readyz
         readinessProbe:
           httpGet:
             port: 9443

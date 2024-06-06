@@ -13,8 +13,16 @@ spec:
         - configMapRef:
             name: controller-manager-env
         args:
+        - "--listen=:40000"
+        - "--headless=true"
+        - "--api-version=2"
+        - "--continue"
+        - "--accept-multiclient"
+        - "--log"
+        - "exec"
+        - "/manager"
+        - "--"
         - controller
-        - --leader-elect
         - --config-map-name=$(OPERATOR_DEPLOYMENT_NAME)-config
         - --secret-name=$(OPERATOR_DEPLOYMENT_NAME)-config
         - --webhook-port=9443
