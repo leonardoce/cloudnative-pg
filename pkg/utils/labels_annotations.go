@@ -92,6 +92,10 @@ const (
 
 	// IsManagedLabelName is the name of the label used to indicate a '.spec.managed' resource
 	IsManagedLabelName = MetadataNamespace + "/isManaged"
+
+	// PluginNameLabelName is the name of the label to be applied to services
+	// to have them detected as CNPG-i plugins
+	PluginNameLabelName = MetadataNamespace + "/pluginName"
 )
 
 const (
@@ -205,6 +209,20 @@ const (
 	// ClusterRestartAnnotationName is the name of the annotation containing the
 	// latest required restart time
 	ClusterRestartAnnotationName = "kubectl.kubernetes.io/restartedAt"
+
+	// PluginClientSecretAnnotationName is the name of the annotation containing
+	// the secret containing the TLS credentials that the operator should use to
+	// connect to the plugin
+	PluginClientSecretAnnotationName = MetadataNamespace + "/pluginClientSecret"
+
+	// PluginServerSecretAnnotationName is the name of the annotation containing
+	// the secret containing the TLS credentials that are used by the plugin
+	// server to authenticate
+	PluginServerSecretAnnotationName = MetadataNamespace + "/pluginServerSecret"
+
+	// PluginPortAnnotationName is the name of the annotation containing the
+	// port the plugin is listening to
+	PluginPortAnnotationName = MetadataNamespace + "/pluginPort"
 )
 
 type annotationStatus string
