@@ -117,7 +117,9 @@ DNS
 DataBackupConfiguration
 DataBase
 DataSource
+DatabaseConfiguration
 DatabaseRoleRef
+DatabaseStatus
 DemotionToken
 DeploymentStrategy
 DevOps
@@ -147,6 +149,7 @@ EnvVar
 EphemeralVolumeSource
 EphemeralVolumesSizeLimit
 EphemeralVolumesSizeLimitConfiguration
+ErrorMessage
 ExternalCluster
 FQDN
 Fei
@@ -225,6 +228,7 @@ LocalObjectReference
 MAPPEDMETRIC
 MVCC
 ManagedConfiguration
+ManagedDatabaseStatus
 ManagedRoles
 ManagedRolesStatus
 ManagedService
@@ -489,6 +493,7 @@ albert
 allnamespaces
 alloc
 allocator
+allowConnections
 allowPrivilegeEscalation
 allowVolumeExpansion
 amd
@@ -665,6 +670,7 @@ dT
 danglingPVC
 dataChecksums
 databackupconfiguration
+databaseStatus
 datacenter
 datacenters
 datallowconn
@@ -721,6 +727,7 @@ env
 envFrom
 ephemeralVolumeSource
 ephemeralVolumesSizeLimit
+errorMessage
 eu
 excludePatterns
 executables
@@ -818,6 +825,7 @@ ip
 ipcs
 ips
 isPrimary
+isTemplate
 issuecomment
 italy
 jdbc
@@ -940,6 +948,7 @@ objid
 objref
 objsubid
 observability
+observedGeneration
 oc
 ol
 olm
