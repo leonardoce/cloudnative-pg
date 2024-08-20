@@ -11,6 +11,8 @@ resources:
 - bases/postgresql.cnpg.io_imagecatalogs.yaml
 - bases/postgresql.cnpg.io_clusterimagecatalogs.yaml
 - bases/postgresql.cnpg.io_databases.yaml
+- bases/postgresql.cnpg.io_publications.yaml
+- bases/postgresql.cnpg.io_subscriptions.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 patches:
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix.

@@ -162,6 +162,16 @@ func runSubCommand(ctx context.Context, instance *postgres.Instance) error {
 						instance.Namespace: {},
 					},
 				},
+				&apiv1.Publication{}: {
+					Namespaces: map[string]cache.Config{
+						instance.Namespace: {},
+					},
+				},
+				&apiv1.Subscription{}: {
+					Namespaces: map[string]cache.Config{
+						instance.Namespace: {},
+					},
+				},
 			},
 		},
 		// We don't need a cache for secrets and configmap, as all reloads
@@ -204,6 +214,26 @@ func runSubCommand(ctx context.Context, instance *postgres.Instance) error {
 		Complete(dbReconciler)
 	if err != nil {
 		setupLog.Error(err, "unable to create database controller")
+		return err
+	}
+
+	// database publication
+	publicationReconciler := controller.NewPublicationReconciler(mgr, instance)
+	err = ctrl.NewControllerManagedBy(mgr).
+		For(&apiv1.Publication{}).
+		Complete(publicationReconciler)
+	if err != nil {
+		setupLog.Error(err, "unable to create publication controller")
+		return err
+	}
+
+	// database subscription
+	subscriptionReconciler := controller.NewSubscriptionReconciler(mgr, instance)
+	err = ctrl.NewControllerManagedBy(mgr).
+		For(&apiv1.Subscription{}).
+		Complete(subscriptionReconciler)
+	if err != nil {
+		setupLog.Error(err, "unable to create subscription controller")
 		return err
 	}
 
