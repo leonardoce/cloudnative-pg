@@ -510,6 +510,7 @@ allowPrivilegeEscalation
 allowVolumeExpansion
 amd
 angus
+anonymization
 api
 apiGroup
 apiGroups
@@ -806,6 +807,7 @@ http
 httpGet
 https
 hugepages
+icu
 ident
 imageCatalogRef
 imageName

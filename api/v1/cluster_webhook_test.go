@@ -23,6 +23,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cloudnative-pg/machinery/pkg/image/reference"
+	pgversion "github.com/cloudnative-pg/machinery/pkg/postgres/version"
 	storagesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -1440,6 +1442,9 @@ var _ = Describe("validate image name change", func() {
 			Expect(clusterNew.validateImageChange(&clusterOld)).To(HaveLen(1))
 		})
 		It("doesn't complain going from default imageName to same major imageCatalogRef", func() {
+			defaultImageRef := reference.New(versions.DefaultImageName)
+			version, err := pgversion.FromTag(defaultImageRef.Tag)
+			Expect(err).ToNot(HaveOccurred())
 			clusterOld := Cluster{
 				Spec: ClusterSpec{},
 			}
@@ -1450,7 +1455,7 @@ var _ = Describe("validate image name change", func() {
 							Name: "test",
 							Kind: "ImageCatalog",
 						},
-						Major: 16,
+						Major: int(version.Major()),
 					},
 				},
 			}
@@ -1497,7 +1502,7 @@ var _ = Describe("validate image name change", func() {
 			}
 			Expect(clusterNew.validateImageChange(&clusterOld)).To(HaveLen(1))
 		})
-		It("complains going from default imageName to different major imageCatalogRef", func() {
+		It("complains going from imageCatalogRef to different major default imageName", func() {
 			clusterOld := Cluster{
 				Spec: ClusterSpec{
 					ImageCatalogRef: &ImageCatalogRef{
@@ -1514,7 +1519,11 @@ var _ = Describe("validate image name change", func() {
 			}
 			Expect(clusterNew.validateImageChange(&clusterOld)).To(HaveLen(1))
 		})
-		It("doesn't complain going from default imageName to same major imageCatalogRef", func() {
+		It("doesn't complain going from imageCatalogRef to same major default imageName", func() {
+			imageNameRef := reference.New(versions.DefaultImageName)
+			version, err := pgversion.FromTag(imageNameRef.Tag)
+			Expect(err).ToNot(HaveOccurred())
+
 			clusterOld := Cluster{
 				Spec: ClusterSpec{
 					ImageCatalogRef: &ImageCatalogRef{
@@ -1522,7 +1531,7 @@ var _ = Describe("validate image name change", func() {
 							Name: "test",
 							Kind: "ImageCatalog",
 						},
-						Major: 16,
+						Major: int(version.Major()),
 					},
 				},
 			}
@@ -3032,15 +3041,17 @@ var _ = Describe("Backup validation", func() {
 		err := cluster.validateBackupConfiguration()
 		Expect(err).To(HaveLen(1))
 	})
+})
 
+var _ = Describe("Backup retention policy validation", func() {
 	It("doesn't complain if given policy is not provided", func() {
 		cluster := &Cluster{
 			Spec: ClusterSpec{
 				Backup: &BackupConfiguration{},
 			},
 		}
-		err := cluster.validateBackupConfiguration()
-		Expect(err).To(BeNil())
+		err := cluster.validateRetentionPolicy()
+		Expect(err).To(BeEmpty())
 	})
 
 	It("doesn't complain if given policy is valid", func() {
@@ -3051,21 +3062,20 @@ var _ = Describe("Backup validation", func() {
 				},
 			},
 		}
-		err := cluster.validateBackupConfiguration()
-		Expect(err).To(BeNil())
+		err := cluster.validateRetentionPolicy()
+		Expect(err).To(BeEmpty())
 	})
 
 	It("complain if a given policy is not valid", func() {
 		cluster := &Cluster{
 			Spec: ClusterSpec{
 				Backup: &BackupConfiguration{
-					BarmanObjectStore: &BarmanObjectStoreConfiguration{},
-					RetentionPolicy:   "09",
+					RetentionPolicy: "09",
 				},
 			},
 		}
-		err := cluster.validateBackupConfiguration()
-		Expect(err).To(HaveLen(2))
+		err := cluster.validateRetentionPolicy()
+		Expect(err).To(HaveLen(1))
 	})
 })
 

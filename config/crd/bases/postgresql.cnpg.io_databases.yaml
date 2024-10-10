@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.15.0
+    controller-gen.kubebuilder.io/version: v0.16.3
   name: databases.postgresql.cnpg.io
 spec:
   group: postgresql.cnpg.io
@@ -71,9 +71,7 @@ spec:
                       This field is effectively required, but due to backwards compatibility is
                       allowed to be empty. Instances of this type with an empty value here are
                       almost certainly wrong.
-                      TODO: Add other useful fields. apiVersion, kind, uid?
                       More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                      TODO: Drop `kubebuilder:default` when controller-gen doesn't need it https://github.com/kubernetes-sigs/kubebuilder/issues/3896.
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
@@ -95,21 +93,70 @@ spec:
                 x-kubernetes-validations:
                 - message: encoding is immutable
                   rule: self == oldSelf
+              icu_locale:
+                description: The ICU_LOCALE (cannot be changed)
+                type: string
+                x-kubernetes-validations:
+                - message: icu_locale is immutable
+                  rule: self == oldSelf
+              icu_rules:
+                description: The ICU_RULES (cannot be changed)
+                type: string
+                x-kubernetes-validations:
+                - message: icu_rules is immutable
+                  rule: self == oldSelf
               isTemplate:
                 description: True when the database is a template
                 type: boolean
+              lc_collate:
+                description: The LC_COLLATE (cannot be changed)
+                type: string
+                x-kubernetes-validations:
+                - message: lc_collate is immutable
+                  rule: self == oldSelf
+              lc_ctype:
+                description: The LC_CTYPE (cannot be changed)
+                type: string
+                x-kubernetes-validations:
+                - message: lc_ctype is immutable
+                  rule: self == oldSelf
+              locale:
+                description: The locale (cannot be changed)
+                type: string
+                x-kubernetes-validations:
+                - message: locale is immutable
+                  rule: self == oldSelf
+              locale_provider:
+                description: The locale provider (cannot be changed)
+                type: string
+                x-kubernetes-validations:
+                - message: locale_provider is immutable
+                  rule: self == oldSelf
               name:
                 description: The name inside PostgreSQL
                 type: string
                 x-kubernetes-validations:
                 - message: name is immutable
                   rule: self == oldSelf
+                - message: the name postgres is reserved
+                  rule: self != 'postgres'
+                - message: the name template0 is reserved
+                  rule: self != 'template0'
+                - message: the name template1 is reserved
+                  rule: self != 'template1'
               owner:
                 description: The owner
                 type: string
               tablespace:
                 description: The default tablespace of this database
                 type: string
+              template:
+                description: The name of the template from which to create the new
+                  database
+                type: string
+                x-kubernetes-validations:
+                - message: template is immutable
+                  rule: self == oldSelf
             required:
             - cluster
             - name

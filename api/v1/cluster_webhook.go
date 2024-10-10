@@ -23,8 +23,11 @@ import (
 	"strconv"
 	"strings"
 
-	barmanUtils "github.com/cloudnative-pg/barman-cloud/pkg/utils"
+	barmanWebhooks "github.com/cloudnative-pg/barman-cloud/pkg/api/webhooks"
+	"github.com/cloudnative-pg/machinery/pkg/image/reference"
 	"github.com/cloudnative-pg/machinery/pkg/log"
+	"github.com/cloudnative-pg/machinery/pkg/postgres/version"
+	"github.com/cloudnative-pg/machinery/pkg/stringset"
 	"github.com/cloudnative-pg/machinery/pkg/types"
 	storagesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	v1 "k8s.io/api/core/v1"
@@ -42,7 +45,6 @@ import (
 
 	"github.com/cloudnative-pg/cloudnative-pg/internal/configuration"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/postgres"
-	"github.com/cloudnative-pg/cloudnative-pg/pkg/stringset"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/utils"
 )
 
@@ -126,7 +128,7 @@ func (r *Cluster) setDefaults(preserveUserSettings bool) {
 		// validateImageName function
 		info := postgres.ConfigurationInfo{
 			Settings:                      postgres.CnpgConfigurationSettings,
-			MajorVersion:                  psqlVersion,
+			Version:                       psqlVersion,
 			UserSettings:                  r.Spec.PostgresConfiguration.Parameters,
 			IsReplicaCluster:              r.IsReplica(),
 			PreserveFixedSettingsFromUser: preserveUserSettings,
@@ -352,6 +354,7 @@ func (r *Cluster) Validate() (allErrs field.ErrorList) {
 		r.validateAntiAffinity,
 		r.validateReplicaMode,
 		r.validateBackupConfiguration,
+		r.validateRetentionPolicy,
 		r.validateConfiguration,
 		r.validateLDAP,
 		r.validateReplicationSlots,
@@ -964,7 +967,7 @@ func (r *Cluster) validateImageName() field.ErrorList {
 	}
 
 	// We have to check if the image has a valid tag
-	tag := utils.GetImageTag(r.Spec.ImageName)
+	tag := reference.New(r.Spec.ImageName).Tag
 	switch tag {
 	case "latest":
 		result = append(
@@ -981,7 +984,7 @@ func (r *Cluster) validateImageName() field.ErrorList {
 				r.Spec.ImageName,
 				"Can't use just the image sha as we can't detect upgrades"))
 	default:
-		_, err := postgres.GetPostgresVersionFromTag(tag)
+		_, err := version.FromTag(tag)
 		if err != nil {
 			result = append(
 				result,
@@ -1093,7 +1096,7 @@ func (r *Cluster) validateConfiguration() field.ErrorList {
 		// validateImageName function
 		return result
 	}
-	if pgVersion < 110000 {
+	if pgVersion.Major() < 11 {
 		result = append(result,
 			field.Invalid(
 				field.NewPath("spec", "imageName"),
@@ -1102,7 +1105,7 @@ func (r *Cluster) validateConfiguration() field.ErrorList {
 	}
 	info := postgres.ConfigurationInfo{
 		Settings:               postgres.CnpgConfigurationSettings,
-		MajorVersion:           pgVersion,
+		Version:                pgVersion,
 		UserSettings:           r.Spec.PostgresConfiguration.Parameters,
 		IsReplicaCluster:       r.IsReplica(),
 		IsWalArchivingDisabled: utils.IsWalArchivingDisabled(&r.ObjectMeta),
@@ -1368,7 +1371,7 @@ func validateSyncReplicaElectionConstraint(constraints SyncReplicaElectionConstr
 // to a new one.
 func (r *Cluster) validateImageChange(old *Cluster) field.ErrorList {
 	var result field.ErrorList
-	var newMajor, oldMajor int
+	var newVersion, oldVersion version.Data
 	var err error
 	var newImagePath *field.Path
 	if r.Spec.ImageCatalogRef != nil {
@@ -1378,7 +1381,7 @@ func (r *Cluster) validateImageChange(old *Cluster) field.ErrorList {
 	}
 
 	r.Status.Image = ""
-	newMajor, err = r.GetPostgresqlVersion()
+	newVersion, err = r.GetPostgresqlVersion()
 	if err != nil {
 		// The validation error will be already raised by the
 		// validateImageName function
@@ -1386,23 +1389,23 @@ func (r *Cluster) validateImageChange(old *Cluster) field.ErrorList {
 	}
 
 	old.Status.Image = ""
-	oldMajor, err = old.GetPostgresqlVersion()
+	oldVersion, err = old.GetPostgresqlVersion()
 	if err != nil {
 		// The validation error will be already raised by the
 		// validateImageName function
 		return result
 	}
 
-	status := postgres.IsUpgradePossible(oldMajor, newMajor)
+	status := version.IsUpgradePossible(oldVersion, newVersion)
 
 	if !status {
 		result = append(
 			result,
 			field.Invalid(
 				newImagePath,
-				newMajor,
+				newVersion,
 				fmt.Sprintf("can't upgrade between majors %v and %v",
-					oldMajor, newMajor)))
+					oldVersion, newVersion)))
 	}
 
 	return result
@@ -2149,57 +2152,24 @@ func (r *Cluster) validateAntiAffinity() field.ErrorList {
 
 // validateBackupConfiguration validates the backup configuration
 func (r *Cluster) validateBackupConfiguration() field.ErrorList {
-	allErrors := field.ErrorList{}
-
-	if r.Spec.Backup == nil || r.Spec.Backup.BarmanObjectStore == nil {
+	if r.Spec.Backup == nil {
 		return nil
 	}
+	return barmanWebhooks.ValidateBackupConfiguration(
+		r.Spec.Backup.BarmanObjectStore,
+		field.NewPath("spec", "backup", "barmanObjectStore"),
+	)
+}
 
-	credentialsCount := 0
-	if r.Spec.Backup.BarmanObjectStore.BarmanCredentials.Azure != nil {
-		credentialsCount++
-		allErrors = r.Spec.Backup.BarmanObjectStore.BarmanCredentials.Azure.ValidateAzureCredentials(
-			field.NewPath("spec", "backupConfiguration", "azureCredentials"))
+// validateRetentionPolicy validates the retention policy configuration
+func (r *Cluster) validateRetentionPolicy() field.ErrorList {
+	if r.Spec.Backup == nil {
+		return nil
 	}
-	if r.Spec.Backup.BarmanObjectStore.BarmanCredentials.AWS != nil {
-		credentialsCount++
-		allErrors = r.Spec.Backup.BarmanObjectStore.BarmanCredentials.AWS.ValidateAwsCredentials(
-			field.NewPath("spec", "backupConfiguration", "s3Credentials"))
-	}
-	if r.Spec.Backup.BarmanObjectStore.BarmanCredentials.Google != nil {
-		credentialsCount++
-		allErrors = r.Spec.Backup.BarmanObjectStore.BarmanCredentials.Google.ValidateGCSCredentials(
-			field.NewPath("spec", "backupConfiguration", "googleCredentials"))
-	}
-	if credentialsCount == 0 {
-		allErrors = append(allErrors, field.Invalid(
-			field.NewPath("spec", "backupConfiguration"),
-			r.Spec.Backup.BarmanObjectStore,
-			"missing credentials. "+
-				"One and only one of azureCredentials, s3Credentials and googleCredentials are required",
-		))
-	}
-	if credentialsCount > 1 {
-		allErrors = append(allErrors, field.Invalid(
-			field.NewPath("spec", "backupConfiguration"),
-			r.Spec.Backup.BarmanObjectStore,
-			"too many credentials. "+
-				"One and only one of azureCredentials, s3Credentials and googleCredentials are required",
-		))
-	}
-
-	if r.Spec.Backup.RetentionPolicy != "" {
-		_, err := barmanUtils.ParsePolicy(r.Spec.Backup.RetentionPolicy)
-		if err != nil {
-			allErrors = append(allErrors, field.Invalid(
-				field.NewPath("spec", "retentionPolicy"),
-				r.Spec.Backup.RetentionPolicy,
-				"not a valid retention policy",
-			))
-		}
-	}
-
-	return allErrors
+	return barmanWebhooks.ValidateRetentionPolicy(
+		r.Spec.Backup.RetentionPolicy,
+		field.NewPath("spec", "backup", "retentionPolicy"),
+	)
 }
 
 func (r *Cluster) validateReplicationSlots() field.ErrorList {
@@ -2226,7 +2196,7 @@ func (r *Cluster) validateReplicationSlots() field.ErrorList {
 		return nil
 	}
 
-	if psqlVersion < 110000 {
+	if psqlVersion.Major() < 11 {
 		if replicationSlots.HighAvailability.GetEnabled() {
 			return field.ErrorList{
 				field.Invalid(

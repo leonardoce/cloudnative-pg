@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"slices"
 	"time"
 
 	barmanBackup "github.com/cloudnative-pg/barman-cloud/pkg/backup"
@@ -30,6 +31,7 @@ import (
 	barmanCredentials "github.com/cloudnative-pg/barman-cloud/pkg/credentials"
 	"github.com/cloudnative-pg/machinery/pkg/fileutils"
 	"github.com/cloudnative-pg/machinery/pkg/log"
+	pgTime "github.com/cloudnative-pg/machinery/pkg/postgres/time"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -42,7 +44,6 @@ import (
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/conditions"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/postgres"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/resources"
-	"github.com/cloudnative-pg/cloudnative-pg/pkg/utils"
 
 	// this is needed to correctly open the sql connection with the pgx driver
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -189,7 +190,7 @@ func (b *BackupCommand) run(ctx context.Context) {
 
 			meta.SetStatusCondition(&b.Cluster.Status.Conditions, *apiv1.BuildClusterBackupFailedCondition(err))
 
-			b.Cluster.Status.LastFailedBackup = utils.GetCurrentTimestampWithFormat(time.RFC3339)
+			b.Cluster.Status.LastFailedBackup = pgTime.GetCurrentTimestampWithFormat(time.RFC3339)
 			return b.Client.Status().Patch(ctx, b.Cluster, client.MergeFrom(origCluster))
 		}); failErr != nil {
 			b.Log.Error(failErr, "while setting cluster condition for failed backup")
@@ -208,7 +209,6 @@ func (b *BackupCommand) takeBackup(ctx context.Context) error {
 
 	// Update backup status in cluster conditions on startup
 	if err := b.retryWithRefreshedCluster(ctx, func() error {
-		// TODO: this condition is set only here, never removed or handled?
 		return conditions.Patch(ctx, b.Client, b.Cluster, apiv1.BackupStartingCondition)
 	}); err != nil {
 		b.Log.Error(err, "Error changing backup condition (backup started)")
@@ -282,19 +282,13 @@ func (b *BackupCommand) backupMaintenance(ctx context.Context) {
 		}
 	}
 
-	// Extracting the latest backup using barman-cloud-backup-list
-	backupList, err := barmanCommand.GetBackupList(
-		ctx,
-		b.Cluster.Spec.Backup.BarmanObjectStore,
-		b.Backup.Status.ServerName,
-		b.Env,
-	)
+	data, err := b.getBackupData(ctx)
 	if err != nil {
 		// Proper logging already happened inside GetBackupList
 		return
 	}
 
-	if err := deleteBackupsNotInCatalog(ctx, b.Client, b.Cluster, backupList); err != nil {
+	if err := deleteBackupsNotInCatalog(ctx, b.Client, b.Cluster, data.GetBackupIDs()); err != nil {
 		b.Log.Error(err, "while deleting Backups not present in the catalog")
 	}
 
@@ -302,7 +296,11 @@ func (b *BackupCommand) backupMaintenance(ctx context.Context) {
 		origCluster := b.Cluster.DeepCopy()
 
 		// Set the first recoverability point and the last successful backup
-		updateClusterStatusWithBackupTimes(b.Cluster, backupList)
+		b.Cluster.UpdateBackupTimes(
+			apiv1.BackupMethod(data.GetBackupMethod()),
+			data.GetFirstRecoverabilityPoint(),
+			data.GetLastSuccessfulBackupTime(),
+		)
 
 		if reflect.DeepEqual(origCluster.Status, b.Cluster.Status) {
 			return nil
@@ -311,18 +309,6 @@ func (b *BackupCommand) backupMaintenance(ctx context.Context) {
 	}); err != nil {
 		b.Log.Error(err, "while setting the firstRecoverabilityPoint and latestSuccessfulBackup")
 	}
-}
-
-// updateClusterStatusWithBackupTimes updates the last successful backup time and first
-// recoverability point for the cluster
-func updateClusterStatusWithBackupTimes(cluster *apiv1.Cluster, backupList *barmanCatalog.Catalog) {
-	firstRecoverabilityPoint := backupList.FirstRecoverabilityPoint()
-	var lastSuccessfulBackup *time.Time
-	if lastSuccessfulBackupInfo := backupList.LatestBackupInfo(); lastSuccessfulBackupInfo != nil {
-		lastSuccessfulBackup = &lastSuccessfulBackupInfo.EndTime
-	}
-
-	cluster.UpdateBackupTimes(apiv1.BackupMethodBarmanObjectStore, firstRecoverabilityPoint, lastSuccessfulBackup)
 }
 
 // PatchBackupStatusAndRetry updates a certain backup's status in the k8s database,
@@ -355,7 +341,7 @@ func (b *BackupCommand) setupBackupStatus() {
 	backupStatus := b.Backup.GetStatus()
 
 	if b.Capabilities.ShouldExecuteBackupWithName(b.Cluster) {
-		backupStatus.BackupName = fmt.Sprintf("backup-%v", utils.ToCompactISO8601(time.Now()))
+		backupStatus.BackupName = fmt.Sprintf("backup-%v", pgTime.ToCompactISO8601(time.Now()))
 	}
 	backupStatus.BarmanCredentials = barmanConfiguration.BarmanCredentials
 	backupStatus.EndpointCA = barmanConfiguration.EndpointCA
@@ -392,7 +378,7 @@ func deleteBackupsNotInCatalog(
 	ctx context.Context,
 	cli client.Client,
 	cluster *apiv1.Cluster,
-	catalog *barmanCatalog.Catalog,
+	backupIDs []string,
 ) error {
 	// We had two options:
 	//
@@ -428,16 +414,10 @@ func deleteBackupsNotInCatalog(
 			!useSameBackupLocation(&backup.Status, cluster) {
 			continue
 		}
-		var found bool
-		for _, barmanBackup := range catalog.List {
-			if backup.Status.BackupID == barmanBackup.ID {
-				found = true
-				break
-			}
-		}
+
 		// here we could add further checks, e.g. if the backup is not found but would still
 		// be in the retention policy we could either not delete it or update it is status
-		if !found {
+		if !slices.Contains(backupIDs, backup.Status.BackupID) {
 			err := cli.Delete(ctx, &backups.Items[id])
 			if err != nil {
 				errors = append(errors, fmt.Errorf(
@@ -468,4 +448,23 @@ func useSameBackupLocation(backup *apiv1.BackupStatus, cluster *apiv1.Cluster) b
 			// if not specified we use the cluster name as server name
 			(configuration.ServerName == "" && backup.ServerName == cluster.Name)) &&
 		reflect.DeepEqual(backup.BarmanCredentials, configuration.BarmanCredentials)
+}
+
+type backupDataGetter interface {
+	GetFirstRecoverabilityPoint() *time.Time
+	GetLastSuccessfulBackupTime() *time.Time
+	GetBackupIDs() []string
+	GetBackupMethod() string
+}
+
+func (b *BackupCommand) getBackupData(ctx context.Context) (backupDataGetter, error) {
+	// TODO: here we can inject any plugin logic and skip the default barman execution
+
+	// Extracting the latest backup using barman-cloud-backup-list
+	return barmanCommand.GetBackupList(
+		ctx,
+		b.Cluster.Spec.Backup.BarmanObjectStore,
+		b.Backup.Status.ServerName,
+		b.Env,
+	)
 }
