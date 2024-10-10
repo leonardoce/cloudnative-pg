@@ -83,4 +83,3 @@ resources:
   kind: Subscription
   path: github.com/cloudnative-pg/cloudnative-pg/api/v1
   version: v1
-version: "3"
