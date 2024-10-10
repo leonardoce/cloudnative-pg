@@ -14,20 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package e2e
-
-import (
-	"github.com/cloudnative-pg/cloudnative-pg/tests"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-)
-
-// A failing test to verify that our ignore-fails label is correctly ignored
-// when evaluating the test reports.
-var _ = Describe("ignoreFails on e2e tests", Label(tests.LabelIgnoreFails),
-	func() {
-		It("generates a failing tests that should be ignored", func() {
-			Expect(true).To(BeFalse())
-		})
-	})
+// Package sternmultitailer handle the logs of every pod in the tests
+// saving them in a structured way within a directory.
+package sternmultitailer

@@ -449,11 +449,6 @@ You can list the backups that have been created for a named cluster with:
 kubectl get backup -l cnpg.io/cluster=<CLUSTER>
 ```
 
-!!! Important
-    Backup labelling has been introduced in version 1.10.0 of CloudNativePG.
-    So only those resources that have been created with that version or
-    a higher one will contain such a label.
-
 ## Storage information
 
 Sometimes is useful to double-check the StorageClass used by the cluster to have
@@ -792,3 +787,16 @@ For example:
 Please remember that you must have enough hugepages memory available to schedule
 every Pod in the Cluster (in the example above, at least 512MiB per Pod must be
 free).
+
+### Bootstrap job hangs in running status
+
+If your Cluster's initialization job hangs while in `Running` status with the
+message:
+"error while waiting for the API server to be reachable", you probably have
+a network issue preventing communication with the Kubernetes API server.
+Initialization jobs (like most of jobs) need to access the Kubernetes
+API. Please check your networking.
+
+Another possible cause is when you have sidecar injection configured. Sidecars
+such as Istio may make the network temporarily unavailable during startup. If
+you have sidecar injection enabled, retry with injection disabled.

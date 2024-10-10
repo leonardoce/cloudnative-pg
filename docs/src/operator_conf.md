@@ -45,6 +45,7 @@ Name | Description
 `CERTIFICATE_DURATION` | Determines the lifetime of the generated certificates in days. Default is 90.
 `EXPIRING_CHECK_THRESHOLD` | Determines the threshold, in days, for identifying a certificate as expiring. Default is 7. 
 `CREATE_ANY_SERVICE` | when set to `true`, will create `-any` service for the cluster. Default is `false`
+`INCLUDE_PLUGINS` | A comma-separated list of plugins to be always included in the Cluster's reconciliation.
 
 Values in `INHERITED_ANNOTATIONS` and `INHERITED_LABELS` support path-like wildcards. For example, the value `example.com/*` will match
 both the value `example.com/one` and `example.com/two`.
@@ -56,12 +57,6 @@ cluster. That secret will be named `<cluster-name>-pull`.
 The namespace where the operator looks for the `PULL_SECRET_NAME` secret is where
 you installed the operator. If the operator is not able to find that secret, it
 will ignore the configuration parameter.
-
-!!! Warning
-    Previous versions of the operator copied the `PULL_SECRET_NAME` secret inside
-    the namespaces where you deploy the PostgreSQL clusters. From version "1.11.0"
-    the behavior changed to match the previous description. The pull secrets
-    created by the previous versions of the operator are unused.
 
 ## Defining an operator config map
 

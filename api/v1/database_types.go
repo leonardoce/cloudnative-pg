@@ -26,7 +26,7 @@ import (
 type DatabaseReclaimPolicy string
 
 const (
-	// DatabaseReclaimDelete means the database will be deleted from Kubernetes on release
+	// DatabaseReclaimDelete means the database will be deleted from its PostgreSQL Cluster on release
 	// from its claim.
 	DatabaseReclaimDelete DatabaseReclaimPolicy = "delete"
 
@@ -101,9 +101,15 @@ type DatabaseStatus struct {
 // Database is the Schema for the databases API
 type Database struct {
 	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.ObjectMeta `json:"metadata"`
 
-	Spec   DatabaseSpec   `json:"spec,omitempty"`
+	// Specification of the desired Database.
+	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	Spec DatabaseSpec `json:"spec"`
+	// Most recently observed status of the Database. This data may not be up to
+	// date. Populated by the system. Read-only.
+	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// +optional
 	Status DatabaseStatus `json:"status,omitempty"`
 }
 

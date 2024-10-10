@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/cloudnative-pg/machinery/pkg/log"
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -47,7 +48,6 @@ import (
 	"github.com/cloudnative-pg/cloudnative-pg/internal/management/linkerd"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/concurrency"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management"
-	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/log"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/postgres"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/postgres/logpipe"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/postgres/webserver"
@@ -81,7 +81,7 @@ func NewCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "run [flags]",
 		PreRunE: func(cmd *cobra.Command, _ []string) error {
-			return management.WaitKubernetesAPIServer(cmd.Context(), client.ObjectKey{
+			return management.WaitForGetCluster(cmd.Context(), client.ObjectKey{
 				Name:      clusterName,
 				Namespace: namespace,
 			})
@@ -181,6 +181,9 @@ func runSubCommand(ctx context.Context, instance *postgres.Instance) error {
 				DisableFor: []client.Object{
 					&corev1.Secret{},
 					&corev1.ConfigMap{},
+					// we don't have the permissions to cache backups, as the ServiceAccount
+					// doesn't have watch permission on the backup status
+					&apiv1.Backup{},
 				},
 			},
 		},
@@ -217,7 +220,7 @@ func runSubCommand(ctx context.Context, instance *postgres.Instance) error {
 		return err
 	}
 
-	// database publication
+	// database publication reconciler
 	publicationReconciler := controller.NewPublicationReconciler(mgr, instance)
 	err = ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1.Publication{}).
@@ -227,7 +230,7 @@ func runSubCommand(ctx context.Context, instance *postgres.Instance) error {
 		return err
 	}
 
-	// database subscription
+	// database subscription reconciler
 	subscriptionReconciler := controller.NewSubscriptionReconciler(mgr, instance)
 	err = ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1.Subscription{}).
@@ -306,7 +309,11 @@ func runSubCommand(ctx context.Context, instance *postgres.Instance) error {
 		return err
 	}
 
-	localSrv, err := webserver.NewLocalWebServer(instance)
+	localSrv, err := webserver.NewLocalWebServer(
+		instance,
+		mgr.GetClient(),
+		mgr.GetEventRecorderFor("local-webserver"),
+	)
 	if err != nil {
 		return err
 	}

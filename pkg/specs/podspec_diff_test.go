@@ -14,20 +14,27 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package execlog
+package specs
 
 import (
-	"testing"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
-// These tests use Ginkgo (BDD-style Go testing framework). Refer to
-// http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
+var _ = Describe("PodSpecDiff", func() {
+	It("returns true for superuser-secret volume", func() {
+		Expect(shouldIgnoreCurrentVolume("superuser-secret")).To(BeTrue())
+	})
 
-func TestExecPipe(t *testing.T) {
-	RegisterFailHandler(Fail)
+	It("returns true for app-secret volume", func() {
+		Expect(shouldIgnoreCurrentVolume("app-secret")).To(BeTrue())
+	})
 
-	RunSpecs(t, "Execlog suite")
-}
+	It("returns false for other volumes", func() {
+		Expect(shouldIgnoreCurrentVolume("other-volume")).To(BeFalse())
+	})
+
+	It("returns false for empty volume name", func() {
+		Expect(shouldIgnoreCurrentVolume("")).To(BeFalse())
+	})
+})

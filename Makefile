@@ -47,9 +47,9 @@ GORELEASER_VERSION ?= v2.2.0
 SPELLCHECK_VERSION ?= 0.41.0
 WOKE_VERSION ?= 0.19.0
 OPERATOR_SDK_VERSION ?= v1.36.1
-OPM_VERSION ?= v1.46.0
+OPM_VERSION ?= v1.47.0
 PREFLIGHT_VERSION ?= 1.10.0
-OPENSHIFT_VERSIONS ?= v4.12-v4.16
+OPENSHIFT_VERSIONS ?= v4.12-v4.17
 ARCH ?= amd64
 
 export CONTROLLER_IMG
@@ -271,7 +271,7 @@ apidoc: genref ## Update the API Reference section of the documentation.
 ##@ Cleanup
 
 clean: ## Clean-up the work tree from build/test artifacts
-	rm -rf $(LOCALBIN)/kubectl-cnpg $(LOCALBIN)/manager $(DIST_PATH) _*/ tests/e2e/out/ cover.out
+	rm -rf $(LOCALBIN)/kubectl-cnpg $(LOCALBIN)/manager $(DIST_PATH) _*/ tests/e2e/out/ tests/e2e/*_logs/ cover.out
 
 distclean: clean ## Clean-up the work tree removing also cached tools binaries
 	! [ -d "$(ENVTEST_ASSETS_DIR)" ] || chmod -R u+w $(ENVTEST_ASSETS_DIR)

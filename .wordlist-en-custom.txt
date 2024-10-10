@@ -2,6 +2,8 @@ AES
 API's
 APIs
 ARMv
+AZ
+AZs
 AcolumnName
 AdditionalCommandArgs
 AdditionalPodAffinity
@@ -414,6 +416,7 @@ ServiceSelectorType
 ServiceSpec
 ServiceTemplateSpec
 ServiceUpdateStrategy
+SetStatusInCluster
 ShutdownCheckpointToken
 Silvela
 Slonik
@@ -758,6 +761,7 @@ ffd
 fieldPath
 fieldref
 filesystem
+finalizer
 findstr
 fio
 firstRecoverabilityPoint

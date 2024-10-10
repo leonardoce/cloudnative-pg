@@ -33,10 +33,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/log"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/postgres"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/resources/instance"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/utils"
+	"github.com/cloudnative-pg/machinery/pkg/log"
 )
 
 // DatabaseReconciler reconciles a Database object
@@ -149,9 +149,9 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			if err := r.Update(ctx, &database); err != nil {
 				return ctrl.Result{}, err
 			}
-
-			return ctrl.Result{}, nil
 		}
+
+		return ctrl.Result{}, nil
 	}
 
 	if err := r.alignPgDatabase(
@@ -165,7 +165,7 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		)
 	}
 
-	return r.succeededRenconciliation(
+	return r.succeededReconciliation(
 		ctx,
 		&database,
 	)
@@ -183,7 +183,7 @@ func (r *DatabaseReconciler) failedReconciliation(
 
 	var statusError *instance.StatusError
 	if errors.As(err, &statusError) {
-		// The body line of the instance manager contain the human
+		// The body line of the instance manager contains the human
 		// readable error
 		database.Status.Error = statusError.Body
 	}
@@ -198,7 +198,7 @@ func (r *DatabaseReconciler) failedReconciliation(
 }
 
 // succeededReconciliation marks the reconciliation as succeeded
-func (r *DatabaseReconciler) succeededRenconciliation(
+func (r *DatabaseReconciler) succeededReconciliation(
 	ctx context.Context,
 	database *apiv1.Database,
 ) (ctrl.Result, error) {
@@ -216,7 +216,7 @@ func (r *DatabaseReconciler) succeededRenconciliation(
 	}, nil
 }
 
-// NewDatabaseReconciler creates a new databare reconciler
+// NewDatabaseReconciler creates a new database reconciler
 func NewDatabaseReconciler(
 	mgr manager.Manager,
 	instance *postgres.Instance,
@@ -280,11 +280,7 @@ func (r *DatabaseReconciler) alignPgDatabase(ctx context.Context, obj *apiv1.Dat
 		return nil
 	}
 
-	if err := r.createDatabase(ctx, db, obj); err != nil {
-		return err
-	}
-
-	return nil
+	return r.createDatabase(ctx, db, obj)
 }
 
 func (r *DatabaseReconciler) createDatabase(
@@ -309,11 +305,9 @@ func (r *DatabaseReconciler) createDatabase(
 		sqlCreateDatabase += fmt.Sprintf(" CONNECTION LIMIT %v", *obj.Spec.ConnectionLimit)
 	}
 
-	if _, err := db.ExecContext(ctx, sqlCreateDatabase); err != nil {
-		return err
-	}
+	_, err := db.ExecContext(ctx, sqlCreateDatabase)
 
-	return nil
+	return err
 }
 
 func (r *DatabaseReconciler) patchDatabase(
@@ -387,7 +381,7 @@ func (r *DatabaseReconciler) dropPgDatabase(ctx context.Context, obj *apiv1.Data
 
 	_, err = db.ExecContext(
 		ctx,
-		fmt.Sprintf("DROP DATABASE %s", pgx.Identifier{obj.Spec.Name}.Sanitize()),
+		fmt.Sprintf("DROP DATABASE IF EXISTS %s", pgx.Identifier{obj.Spec.Name}.Sanitize()),
 	)
 	return err
 }

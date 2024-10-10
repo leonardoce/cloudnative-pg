@@ -3945,6 +3945,10 @@ spec:
                     PluginConfiguration specifies a plugin that need to be loaded for this
                     cluster to be reconciled
                   properties:
+                    enabled:
+                      default: true
+                      description: Enabled is true if this plugin will be used
+                      type: boolean
                     name:
                       description: Name is the plugin name
                       type: string
@@ -6032,6 +6036,10 @@ spec:
                       items:
                         type: string
                       type: array
+                    status:
+                      description: Status contain the status reported by the plugin
+                        through the SetStatusInCluster interface
+                      type: string
                     version:
                       description: |-
                         Version is the version of the plugin loaded by the

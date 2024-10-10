@@ -24,6 +24,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/cloudnative-pg/machinery/pkg/log"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -47,7 +48,6 @@ import (
 	"github.com/cloudnative-pg/cloudnative-pg/internal/cnpi/plugin/repository"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/configuration"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/certs"
-	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/log"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/postgres"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/reconciler/hibernation"
 	instanceReconciler "github.com/cloudnative-pg/cloudnative-pg/pkg/reconciler/instance"
@@ -154,7 +154,7 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	ctx = cluster.SetInContext(ctx)
 
 	// Load the required plugins
-	pluginClient, err := cnpgiClient.WithPlugins(ctx, r.Plugins, cluster.Spec.Plugins.GetNames()...)
+	pluginClient, err := cnpgiClient.WithPlugins(ctx, r.Plugins, cluster.Spec.Plugins.GetEnabledPluginNames()...)
 	if err != nil {
 		var errUnknownPlugin *repository.ErrUnknownPlugin
 		if errors.As(err, &errUnknownPlugin) {
@@ -164,7 +164,9 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 					ctx,
 					cluster,
 					apiv1.PhaseUnknownPlugin,
-					fmt.Sprintf("Unknown plugin %s", errUnknownPlugin.Name),
+					fmt.Sprintf("Unknown plugin: '%s'. "+
+						"This may be caused by the plugin not being loaded correctly by the operator. "+
+						"Check the operator and plugin logs for errors", errUnknownPlugin.Name),
 				)
 		}
 
@@ -457,8 +459,12 @@ func (r *ClusterReconciler) reconcile(ctx context.Context, cluster *apiv1.Cluste
 	}
 
 	// Calls post-reconcile hooks
-	hookResult := postReconcilePluginHooks(ctx, cluster, cluster)
-	return hookResult.Result, hookResult.Err
+	if hookResult := postReconcilePluginHooks(ctx, cluster, cluster); hookResult.Err != nil ||
+		!hookResult.Result.IsZero() {
+		return hookResult.Result, hookResult.Err
+	}
+
+	return setStatusPluginHook(ctx, r.Client, getPluginClientFromContext(ctx), cluster)
 }
 
 func (r *ClusterReconciler) ensureNoFailoverOnFullDisk(
@@ -1322,7 +1328,6 @@ func (r *ClusterReconciler) markPVCReadyForCompletedJobs(
 
 	for _, job := range completeJobs {
 		for _, pvc := range resources.pvcs.Items {
-			pvc := pvc
 			if !persistentvolumeclaim.IsUsedByPodSpec(job.Spec.Template.Spec, pvc.Name) {
 				continue
 			}
