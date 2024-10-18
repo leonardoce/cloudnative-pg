@@ -29,8 +29,8 @@ const (
 	// LabelClusterMetadata is a label for selecting cluster-metadata test
 	LabelClusterMetadata = "cluster-metadata"
 
-	// LabelDeclarativePubSub  is a label for selecting the declarative publication / subscription test
-	LabelDeclarativePubSub = "declarative-pub-sub"
+	// LabelDeclarativePubSub  is a label for selecting the publication / subscription test
+	LabelDeclarativePubSub = "publication-subscription"
 
 	// LabelDisruptive is the string for labelling disruptive tests
 	LabelDisruptive = "disruptive"
