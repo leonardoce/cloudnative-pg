@@ -165,6 +165,17 @@ type Data struct {
 
 	// DrainTaints is a list of taints the operator will watch and treat as Unschedule
 	DrainTaints []string `json:"drainTaints" env:"DRAIN_TAINTS"`
+
+	// InstanceLeaderElectionEnabled enables the instance manager leader election is enabled
+	InstanceLeaderElectionEnabled bool `json:"instanceLeaderElectionEnabled" env:"INSTANCE_LEADER_ELECTION_ENABLED"`
+
+	// InstanceLeaderElectionLeaseDurationSeconds is the duration of the instance lock, in seconds.
+	// Used only if InstanceLeaderElectionEnabled is enabled
+	InstanceLeaderElectionLeaseDurationSeconds int `json:"instanceLeaderElectionLeaseDurationSeconds" env:"INSTANCE_LEADER_ELECTION_LEASE_DURATION_SECONDS"` //nolint
+
+	// InstanceLeaderElectionRenewDeadlineSeconds is the renew deadline of the instance lock, in seconds.
+	// Used only if InstanceLeaderElectionEnabled is enabled
+	InstanceLeaderElectionRenewDeadlineSeconds int `json:"instanceLeaderElectionRenewDeadlineSeconds" env:"INSTANCE_LEADER_ELECTION_RENEW_DEADLINE_SECONDS"` //nolint
 }
 
 // Current is the configuration used by the operator

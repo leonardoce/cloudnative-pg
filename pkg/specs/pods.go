@@ -171,6 +171,24 @@ func CreatePodEnvConfig(cluster apiv1.Cluster, podName string) EnvConfig {
 		)
 	}
 
+	if configuration.Current.InstanceLeaderElectionEnabled {
+		config.EnvVars = append(
+			config.EnvVars,
+			corev1.EnvVar{
+				Name:  "CNPG_LEADER_ELECTION_ENABLED",
+				Value: "true",
+			},
+			corev1.EnvVar{
+				Name:  "CNPG_LEADER_ELECTION_LEASE_DURATION_SECONDS",
+				Value: strconv.Itoa(configuration.Current.InstanceLeaderElectionLeaseDurationSeconds),
+			},
+			corev1.EnvVar{
+				Name:  "CNPG_LEADER_ELECTION_RENEW_DEADLINE_SECONDS",
+				Value: strconv.Itoa(configuration.Current.InstanceLeaderElectionRenewDeadlineSeconds),
+			},
+		)
+	}
+
 	hashValue, _ := hash.ComputeHash(config)
 	config.Hash = hashValue
 	return config

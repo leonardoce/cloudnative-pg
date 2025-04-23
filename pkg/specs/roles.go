@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/cloudnative-pg/cloudnative-pg/internal/configuration"
 )
 
 // CreateRole create a role with the permissions needed by the instance manager
@@ -213,6 +214,22 @@ func CreateRole(cluster apiv1.Cluster, backupOrigin *apiv1.Backup) rbacv1.Role {
 				"update",
 			},
 		},
+	}
+
+	if configuration.Current.InstanceLeaderElectionEnabled {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups: []string{
+				"coordination.k8s.io",
+			},
+			Resources: []string{
+				"leases",
+			},
+			Verbs: []string{
+				"create",
+				"get",
+				"update",
+			},
+		})
 	}
 
 	return rbacv1.Role{

@@ -26,6 +26,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"time"
 
 	"github.com/cloudnative-pg/machinery/pkg/log"
 	"github.com/spf13/cobra"
@@ -154,6 +156,50 @@ func runSubCommand(ctx context.Context, instance *postgres.Instance) error {
 		return errNoFreeWALSpace
 	}
 
+	leaderElectionEnabled := false
+	var leaseDuration time.Duration
+	var renewDeadline time.Duration
+
+	if v, err := strconv.ParseBool(os.Getenv("CNPG_LEADER_ELECTION_ENABLED")); err != nil {
+		leaderElectionEnabled = false
+		contextLogger.Warning(
+			"Cannot parse leader election confinguration, disabling",
+			"leaderElectionEnabled", os.Getenv("CNPG_LEADER_ELECTION_ENABLED"),
+		)
+	} else {
+		leaderElectionEnabled = v
+	}
+
+	if v, err := strconv.ParseInt(os.Getenv("CNPG_LEADER_ELECTION_LEASE_DURATION_SECONDS"), 10, 32); err != nil {
+		leaderElectionEnabled = false
+		contextLogger.Warning(
+			"Cannot parse leader election confinguration, disabling",
+			"leaseDuration", os.Getenv("CNPG_LEADER_ELECTION_LEASE_DURATION_SECONDS"),
+		)
+	} else {
+		leaseDuration = time.Duration(v) * time.Second
+	}
+
+	if v, err := strconv.ParseInt(os.Getenv("CNPG_LEADER_ELECTION_RENEW_DEADLINE_SECONDS"), 10, 32); err != nil {
+		leaderElectionEnabled = false
+		contextLogger.Warning(
+			"Cannot parse leader election confinguration, disabling",
+			"renewDeadline", os.Getenv("CNPG_LEADER_ELECTION_RENEW_DEADLINE_SECONDS"),
+		)
+	} else {
+		renewDeadline = time.Duration(v) * time.Second
+	}
+
+	leaderElectionID := os.Getenv("POD_NAME")
+
+	if !leaderElectionEnabled {
+		contextLogger.Info("Instance manager leader election is disabled")
+	} else {
+		contextLogger.Info("Instance manager leader election is enabled",
+			"leaseDuration", leaseDuration,
+			"renewDeadline", renewDeadline)
+	}
+
 	mgr, err := ctrl.NewManager(config.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,
 		Cache: cache.Options{
@@ -200,7 +246,12 @@ func runSubCommand(ctx context.Context, instance *postgres.Instance) error {
 		BaseContext: func() context.Context {
 			return ctx
 		},
-		Logger: contextLogger.WithValues("logging_pod", os.Getenv("POD_NAME")).GetLogger(),
+		Logger:                        contextLogger.WithValues("logging_pod", os.Getenv("POD_NAME")).GetLogger(),
+		LeaderElection:                leaderElectionEnabled,
+		LeaseDuration:                 &leaseDuration,
+		RenewDeadline:                 &renewDeadline,
+		LeaderElectionReleaseOnCancel: true,
+		LeaderElectionID:              leaderElectionID,
 	})
 	if err != nil {
 		contextLogger.Error(err, "unable to set up overall controller manager")
