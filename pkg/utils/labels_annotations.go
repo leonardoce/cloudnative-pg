@@ -30,6 +30,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// AlphaMetadataNamespace is the annotation and label namespace used by the alpha-level
+// operator APIs
+const AlphaMetadataNamespace = "alpha.cnpg.io"
+
 // MetadataNamespace is the annotation and label namespace used by the operator
 const MetadataNamespace = "cnpg.io"
 
@@ -250,6 +254,14 @@ const (
 	// WebhookValidationAnnotationName is the name of the annotation describing if
 	// the validation webhook should be enabled or disabled
 	WebhookValidationAnnotationName = MetadataNamespace + "/validation"
+
+	// InstancePingerConnectionTimeoutAnnotationName is set on the cluster to configure the
+	// connection deadline used when pinging instances in the instance connectivity checker.
+	InstancePingerConnectionTimeoutAnnotationName = AlphaMetadataNamespace + "/instancePingerConnectionTimeoutMillis"
+
+	// InstancePingerRequestTimeoutAnnotationName is set on the cluster to configure the
+	// request timeout used when pinging instances in the instance connectivity checker.
+	InstancePingerRequestTimeoutAnnotationName = AlphaMetadataNamespace + "/instancePingerRequestTimeoutMillis"
 )
 
 type annotationStatus string

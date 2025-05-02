@@ -33,32 +33,27 @@ import (
 	postgresSpec "github.com/cloudnative-pg/cloudnative-pg/pkg/postgres"
 )
 
-// instanceReachabilityCheckerConfiguration if the configuration of the instance
+// pingerConfig if the configuration of the instance
 // reachability checker
-type instanceReachabilityCheckerConfiguration struct {
+type pingerConfig struct {
 	requestTimeout    time.Duration
 	connectionTimeout time.Duration
 }
 
-// instanceReachabilityChecker can check if a certain instance is reachable by using
+// pinger can check if a certain instance is reachable by using
 // the failsafe REST endpoint
-type instanceReachabilityChecker struct {
+type pinger struct {
+	cfg    pingerConfig
 	dialer *net.Dialer
 	client *http.Client
 }
 
-// instanceCoordinates contains the information needed to reach the REST server of a certain instance
-type instanceCoordinates struct {
-	name string
-	ip   string
-}
-
-// newInstanceReachabilityChecker creates a new instance reachability checker by loading
+// newPinger creates a new instance reachability checker by loading
 // the server CA certificate from the same location that will be used by PostgreSQL.
 // In this case, we avoid using the API Server as it may be unreliable.
-func newInstanceReachabilityChecker(
-	cfg instanceReachabilityCheckerConfiguration,
-) (*instanceReachabilityChecker, error) {
+func newPinger(
+	cfg pingerConfig,
+) (*pinger, error) {
 	certificateLocation := postgresSpec.ServerCACertificateLocation
 	caCertificate, err := os.ReadFile(certificateLocation) //nolint:gosec
 	if err != nil {
@@ -80,18 +75,19 @@ func newInstanceReachabilityChecker(
 		Timeout: cfg.requestTimeout,
 	}
 
-	return &instanceReachabilityChecker{
+	return &pinger{
 		dialer: dialer,
 		client: &client,
+		cfg:    cfg,
 	}, nil
 }
 
-// ensureInstanceIsReachable checks if the instance with the passed coordinates is reachable
+// ping checks if the instance with the passed coordinates is reachable
 // by calling the failsafe endpoint.
-func (e *instanceReachabilityChecker) ensureInstanceIsReachable(key instanceCoordinates) error {
+func (e *pinger) ping(ip string) error {
 	failsafeURL := url.URL{
 		Scheme: "https",
-		Host:   fmt.Sprintf("%s:%d", key.ip, cnpgUrl.StatusPort),
+		Host:   fmt.Sprintf("%s:%d", ip, cnpgUrl.StatusPort),
 		Path:   cnpgUrl.PathFailSafe,
 	}
 
@@ -99,7 +95,8 @@ func (e *instanceReachabilityChecker) ensureInstanceIsReachable(key instanceCoor
 	var err error
 	if res, err = e.client.Get(failsafeURL.String()); err != nil {
 		return &instanceConnectivityError{
-			key: key,
+			ip:  ip,
+			cfg: e.cfg,
 			err: err,
 		}
 	}
@@ -111,16 +108,19 @@ func (e *instanceReachabilityChecker) ensureInstanceIsReachable(key instanceCoor
 
 // instanceConnectivityError is raised when the instance connectivity test failed.
 type instanceConnectivityError struct {
-	key instanceCoordinates
+	ip  string
+	cfg pingerConfig
 	err error
 }
 
 // Error implements the error interface
 func (e *instanceConnectivityError) Error() string {
 	return fmt.Sprintf(
-		"instance connectivity error for instance [%s] with ip [%s]: %s",
-		e.key.name,
-		e.key.ip,
+		"cannot ping instance with ip [%s] "+
+			"connection_timeout:[%v ms] request_timeout:[%v ms]: %s",
+		e.ip,
+		e.cfg.connectionTimeout,
+		e.cfg.requestTimeout,
 		e.err.Error())
 }
 
