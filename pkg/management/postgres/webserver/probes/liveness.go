@@ -97,7 +97,7 @@ func (e *livenessExecutor) IsHealthy(
 		// is not right.
 		// In this way a network configuration problem can be discovered as
 		// quickly as possible.
-		e.reachabilityCheckerExercise(ctx)
+		e.reachabilityCheckerExercise(ctx, &cluster)
 
 		return
 	}
@@ -132,7 +132,7 @@ func (e *livenessExecutor) IsHealthy(
 	// check if we're isolated from the other PG instances too.
 	contextLogger.Warning(
 		"The API server is not reachable, triggering instance connectivity check")
-	if err := e.ensureInstancesAreReachable(ctx); err != nil {
+	if err := e.ensureInstancesAreReachable(ctx, e.lastestKnownCluster); err != nil {
 		contextLogger.Error(err, "Instance connectivity error, liveness probe failing")
 		http.Error(
 			w,
@@ -150,17 +150,23 @@ func (e *livenessExecutor) IsHealthy(
 	_, _ = fmt.Fprint(w, "OK")
 }
 
-func (e *livenessExecutor) reachabilityCheckerExercise(ctx context.Context) {
+func (e *livenessExecutor) reachabilityCheckerExercise(
+	ctx context.Context,
+	cluster *apiv1.Cluster,
+) {
 	contextLogger := log.FromContext(ctx)
 
-	if err := e.ensureInstancesAreReachable(ctx); err != nil {
+	if err := e.ensureInstancesAreReachable(ctx, cluster); err != nil {
 		contextLogger.Error(err, "Instance connectivity test failed, skipping")
 		return
 	}
 }
 
-func (e *livenessExecutor) ensureInstancesAreReachable(ctx context.Context) error {
-	cluster := e.lastestKnownCluster
+func (e *livenessExecutor) ensureInstancesAreReachable(
+	ctx context.Context,
+	cluster *apiv1.Cluster,
+) error {
+	// TODO(leonardoce): unit tests
 	cfg := getPingerConfig(ctx, cluster)
 
 	pinger, err := newPinger(cfg)
