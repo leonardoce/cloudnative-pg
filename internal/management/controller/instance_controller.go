@@ -273,10 +273,6 @@ func (r *InstanceReconciler) Reconcile(
 		}
 	}
 
-	if err = r.updateFailoverQuorumObject(ctx, cluster); err != nil {
-		return reconcile.Result{}, err
-	}
-
 	// IMPORTANT
 	// From now on, the database can be assumed as running. Every operation
 	// needing the database to be up should be put below this line.
@@ -287,6 +283,7 @@ func (r *InstanceReconciler) Reconcile(
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("while getting the postgres connection: %w", err)
 	}
+
 	if result, err := reconciler.ReconcileReplicationSlots(
 		ctx,
 		r.instance.GetPodName(),
@@ -326,6 +323,10 @@ func (r *InstanceReconciler) Reconcile(
 	// IMPORTANT: this needs a database connection to determine
 	// the PostgreSQL major version
 	r.reconcilePostgreSQLAutoConfFilePermissions(ctx, cluster)
+
+	if result, err := r.updateFailoverQuorumObject(ctx, postgresDB, cluster); err != nil || !result.IsZero() {
+		return result, err
+	}
 
 	// EXTREMELY IMPORTANT
 	//
