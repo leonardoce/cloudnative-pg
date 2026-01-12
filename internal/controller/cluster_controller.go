@@ -53,6 +53,7 @@ import (
 	"github.com/cloudnative-pg/cloudnative-pg/internal/cnpi/plugin/repository"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/configuration"
 	rolloutManager "github.com/cloudnative-pg/cloudnative-pg/internal/controller/rollout"
+	"github.com/cloudnative-pg/cloudnative-pg/internal/webhook/guard"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/certs"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/postgres/webserver/client/remote"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/postgres"
@@ -93,6 +94,7 @@ type ClusterReconciler struct {
 
 	drainTaints    []string
 	rolloutManager *rolloutManager.Manager
+	admission      *guard.Admission
 }
 
 // NewClusterReconciler creates a new ClusterReconciler initializing it
@@ -101,6 +103,7 @@ func NewClusterReconciler(
 	discoveryClient *discovery.DiscoveryClient,
 	plugins repository.Interface,
 	drainTaints []string,
+	admission *guard.Admission,
 ) *ClusterReconciler {
 	return &ClusterReconciler{
 		InstanceClient:  remote.NewClient().Instance(),
@@ -114,6 +117,7 @@ func NewClusterReconciler(
 			configuration.Current.GetInstancesRolloutDelay(),
 		),
 		drainTaints: drainTaints,
+		admission:   admission,
 	}
 }
 
@@ -191,6 +195,17 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
+	}
+
+	if result, err := r.admission.EnsureResourceIsAdmitted(
+		ctx,
+		guard.AdmissionParams{
+			Object:       cluster,
+			Client:       r.Client,
+			ApplyChanges: true,
+		},
+	); !result.IsZero() || err != nil {
+		return result, err
 	}
 
 	ctx = cluster.SetInContext(ctx)

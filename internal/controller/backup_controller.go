@@ -47,6 +47,7 @@ import (
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	cnpgiClient "github.com/cloudnative-pg/cloudnative-pg/internal/cnpi/plugin/client"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/cnpi/plugin/repository"
+	"github.com/cloudnative-pg/cloudnative-pg/internal/webhook/guard"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/certs"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/postgres"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/postgres/webserver/client/remote"
@@ -83,6 +84,8 @@ type BackupReconciler struct {
 
 	instanceStatusClient remote.InstanceClient
 	vsr                  *volumesnapshot.Reconciler
+
+	admission *guard.Admission
 }
 
 // NewBackupReconciler properly initializes the BackupReconciler
@@ -90,6 +93,7 @@ func NewBackupReconciler(
 	mgr manager.Manager,
 	discoveryClient *discovery.DiscoveryClient,
 	plugins repository.Interface,
+	admission *guard.Admission,
 ) *BackupReconciler {
 	cli := mgr.GetClient()
 	recorder := mgr.GetEventRecorderFor("cloudnative-pg-backup")
@@ -123,6 +127,17 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			return ctrl.Result{}, reconcile.TerminalError(err)
 		}
 		return ctrl.Result{}, err
+	}
+
+	if result, err := r.admission.EnsureResourceIsAdmitted(
+		ctx,
+		guard.AdmissionParams{
+			Object:       &backup,
+			Client:       r.Client,
+			ApplyChanges: true,
+		},
+	); !result.IsZero() || err != nil {
+		return result, err
 	}
 
 	switch backup.Status.Phase {

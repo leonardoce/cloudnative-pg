@@ -49,6 +49,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/cloudnative-pg/cloudnative-pg/internal/webhook/guard"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/postgres"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/specs"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/utils"
@@ -65,6 +66,14 @@ func SetupClusterWebhookWithManager(mgr ctrl.Manager) error {
 		WithValidator(newBypassableValidator(&ClusterCustomValidator{})).
 		WithDefaulter(&ClusterCustomDefaulter{}).
 		Complete()
+}
+
+// NewClusterAdmissionGuard creates a guard to protect a reconciliation loop.
+func NewClusterAdmissionGuard() *guard.Admission {
+	return &guard.Admission{
+		Defaulter: &ClusterCustomDefaulter{},
+		Validator: &ClusterCustomValidator{},
+	}
 }
 
 // NOTE: The 'path' attribute must follow a specific pattern and should not be modified directly here.
