@@ -132,6 +132,14 @@ type Data struct {
 	// replacing the executable in a pod without restarting
 	EnableInstanceManagerInplaceUpdates bool `json:"enableInstanceManagerInplaceUpdates" env:"ENABLE_INSTANCE_MANAGER_INPLACE_UPDATES"` //nolint
 
+	// EnablePodPatchAnnotation enables the cnpg.io/podPatch annotation feature.
+	// WARNING: This feature allows users with Cluster CRD permissions to create
+	// arbitrary Pod configurations using the operator's privileges.
+	// This should only be enabled in environments where all Cluster CRD users are
+	// trusted.
+	// Default is false for security reasons.
+	EnablePodPatchAnnotation bool `json:"enablePodPatchAnnotation" env:"ENABLE_POD_PATCH_ANNOTATION"`
+
 	// This is the lifetime of the generated certificates
 	CertificateDuration int `json:"certificateDuration" env:"CERTIFICATE_DURATION"`
 

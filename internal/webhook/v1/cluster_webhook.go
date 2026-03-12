@@ -48,6 +48,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/cloudnative-pg/cloudnative-pg/internal/configuration"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/postgres"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/postgres/hba"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/specs"
@@ -2721,6 +2722,19 @@ func (v *ClusterCustomValidator) validatePodPatchAnnotation(r *apiv1.Cluster) fi
 	jsonPatch, ok := r.Annotations[utils.PodPatchAnnotationName]
 	if !ok {
 		return nil
+	}
+
+	// Check if the feature is enabled at the operator level
+	if !configuration.Current.EnablePodPatchAnnotation {
+		return field.ErrorList{
+			field.Forbidden(
+				field.NewPath("metadata", "annotations", utils.PodPatchAnnotationName),
+				"the cnpg.io/podPatch annotation feature is disabled by the operator. "+
+					"This feature must be explicitly enabled "+
+					"by setting ENABLE_POD_PATCH_ANNOTATION=true in the operator configuration. "+
+					"See the documentation for more information",
+			),
+		}
 	}
 
 	if _, err := jsonpatch.DecodePatch([]byte(jsonPatch)); err != nil {

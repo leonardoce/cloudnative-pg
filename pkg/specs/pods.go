@@ -488,7 +488,7 @@ func NewInstance(
 ) (*corev1.Pod, error) {
 	contextLogger := log.FromContext(ctx).WithName("new_instance")
 
-	pod, err := buildInstance(cluster, nodeSerial, tlsEnabled)
+	pod, err := buildInstance(ctx, cluster, nodeSerial, tlsEnabled)
 	if err != nil {
 		return nil, err
 	}
@@ -525,6 +525,7 @@ func NewInstance(
 }
 
 func buildInstance(
+	ctx context.Context,
 	cluster apiv1.Cluster,
 	nodeSerial int,
 	tlsEnabled bool,
@@ -572,27 +573,51 @@ func buildInstance(
 		utils.AnnotateAppArmor(&pod.ObjectMeta, &pod.Spec, cluster.Annotations)
 	}
 
-	if jsonPatch := cluster.Annotations[utils.PodPatchAnnotationName]; jsonPatch != "" {
-		serializedObject, err := json.Marshal(pod)
-		if err != nil {
-			return nil, fmt.Errorf("while serializing pod to JSON: %w", err)
-		}
-		patch, err := jsonpatch.DecodePatch([]byte(jsonPatch))
-		if err != nil {
-			return nil, fmt.Errorf("while decoding JSON patch from annotation: %w", err)
-		}
-
-		serializedObject, err = patch.Apply(serializedObject)
-		if err != nil {
-			return nil, fmt.Errorf("while applying JSON patch from annotation: %w", err)
-		}
-
-		if err = json.Unmarshal(serializedObject, pod); err != nil {
-			return nil, fmt.Errorf("while deserializing pod to JSON: %w", err)
-		}
+	if err := applyPodPatchAnnotation(ctx, pod, cluster); err != nil {
+		return nil, err
 	}
 
 	return pod, nil
+}
+
+// applyPodPatchAnnotation applies the JSON patch from the cluster annotation to the pod
+// if the feature is enabled. Returns nil if no patch is present or if the feature is disabled.
+func applyPodPatchAnnotation(ctx context.Context, pod *corev1.Pod, cluster apiv1.Cluster) error {
+	jsonPatch := cluster.Annotations[utils.PodPatchAnnotationName]
+	if jsonPatch == "" {
+		return nil
+	}
+
+	// Check if feature is enabled even though webhook should have blocked it
+	if !configuration.Current.EnablePodPatchAnnotation {
+		contextLog := log.FromContext(ctx)
+		contextLog.Warning("podPatch annotation present but feature is disabled - ignoring",
+			"cluster", cluster.Name,
+			"namespace", cluster.Namespace,
+		)
+		return nil
+	}
+
+	serializedObject, err := json.Marshal(pod)
+	if err != nil {
+		return fmt.Errorf("while serializing pod to JSON: %w", err)
+	}
+
+	patch, err := jsonpatch.DecodePatch([]byte(jsonPatch))
+	if err != nil {
+		return fmt.Errorf("while decoding JSON patch from annotation: %w", err)
+	}
+
+	serializedObject, err = patch.Apply(serializedObject)
+	if err != nil {
+		return fmt.Errorf("while applying JSON patch from annotation: %w", err)
+	}
+
+	if err = json.Unmarshal(serializedObject, pod); err != nil {
+		return fmt.Errorf("while deserializing pod to JSON: %w", err)
+	}
+
+	return nil
 }
 
 // GetInstanceName returns a string indicating the instance name

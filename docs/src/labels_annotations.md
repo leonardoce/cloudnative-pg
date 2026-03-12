@@ -207,8 +207,14 @@ CloudNativePG manages the following predefined annotations:
 
     When set to JSON-patch formatted patch, the patch will be applied on the instance Pods.
 
+    IMPORTANT: This feature is disabled by default as it can be used as
+    a privilege escalation vector. Users with Cluster CRD permissions can use this
+    annotation to create arbitrary Pod configurations using the operator's privileges.
+    To enable this feature, set `ENABLE_POD_PATCH_ANNOTATION=true` in
+    the [operator configuration](operator_conf.md#security-sensitive-options).
+
     **⚠️ WARNING:** This feature may introduce discrepancies between the
-    operator’s expectations and Kubernetes behavior. Use with caution and only as a
+    operator's expectations and Kubernetes behavior. Use with caution and only as a
     last resort.
 
     **IMPORTANT**: adding or changing this annotation won't trigger a rolling deployment

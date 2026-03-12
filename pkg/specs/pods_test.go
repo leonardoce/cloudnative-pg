@@ -29,6 +29,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/cloudnative-pg/cloudnative-pg/internal/configuration"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/postgres"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/utils"
 
@@ -1029,7 +1030,8 @@ var _ = Describe("NewInstance", func() {
 		}))
 	})
 
-	It("applies JSON patch from annotation", func(ctx SpecContext) {
+	It("applies JSON patch from annotation when feature is enabled", func(ctx SpecContext) {
+		configuration.Current.EnablePodPatchAnnotation = true
 		cluster := apiv1.Cluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
@@ -1049,7 +1051,8 @@ var _ = Describe("NewInstance", func() {
 		Expect(pod.Spec.Containers[0].Image).To(Equal("new-image:latest"))
 	})
 
-	It("returns error if JSON patch is invalid", func(ctx SpecContext) {
+	It("returns error if JSON patch is invalid when feature is enabled", func(ctx SpecContext) {
+		configuration.Current.EnablePodPatchAnnotation = true
 		cluster := apiv1.Cluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster",
@@ -1063,5 +1066,27 @@ var _ = Describe("NewInstance", func() {
 		_, err := NewInstance(ctx, cluster, 1, true)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("while decoding JSON patch from annotation"))
+	})
+
+	It("ignores JSON patch from annotation when feature is disabled", func(ctx SpecContext) {
+		configuration.Current.EnablePodPatchAnnotation = false
+		cluster := apiv1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-cluster",
+				Namespace: "default",
+				Annotations: map[string]string{
+					utils.PodPatchAnnotationName: `[{"op": "replace", "path": "/spec/containers/0/image", "value": "new-image:latest"}]`, //nolint: lll
+				},
+			},
+			Status: apiv1.ClusterStatus{
+				Image: "test",
+			},
+		}
+
+		pod, err := NewInstance(ctx, cluster, 1, true)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(pod).NotTo(BeNil())
+		// The patch should NOT be applied since feature is disabled
+		Expect(pod.Spec.Containers[0].Image).NotTo(Equal("new-image:latest"))
 	})
 })
