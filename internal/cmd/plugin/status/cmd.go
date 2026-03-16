@@ -59,7 +59,7 @@ func NewCmd() *cobra.Command {
 	statusCmd.Flags().StringP(
 		"output", "o", "text", "Output format. One of text|json")
 	statusCmd.Flags().DurationP(
-		"timeout", "t", 10*time.Second, "Timeout for operations that access pod filesystems (e.g., du, cat)")
+		"timeout", "t", 10*time.Second, "Timeout for operations that access pod status")
 
 	return statusCmd
 }

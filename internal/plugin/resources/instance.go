@@ -21,24 +21,18 @@ package resources
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/cloudnative-pg/machinery/pkg/log"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/exec"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/cmd/plugin"
-	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/postgres/webserver/client/remote"
-	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/url"
-	"github.com/cloudnative-pg/cloudnative-pg/pkg/postgres"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/specs"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/utils"
 )
@@ -72,66 +66,6 @@ func GetInstancePods(ctx context.Context, clusterName string) ([]corev1.Pod, cor
 		}
 	}
 	return managedPods, primaryPod, nil
-}
-
-// ExtractInstancesStatus extracts the instance status from the given pod list
-func ExtractInstancesStatus(
-	ctx context.Context,
-	cluster *apiv1.Cluster,
-	config *rest.Config,
-	filteredPods []corev1.Pod,
-) (postgres.PostgresqlStatusList, []error) {
-	result := postgres.PostgresqlStatusList{
-		IsReplicaCluster: cluster.IsReplica(),
-		CurrentPrimary:   cluster.Status.CurrentPrimary,
-	}
-	var errs []error
-
-	for idx := range filteredPods {
-		instanceStatus := getInstanceStatusFromPod(
-			ctx, config, filteredPods[idx])
-		result.Items = append(result.Items, instanceStatus)
-		if instanceStatus.Error != nil {
-			errs = append(errs, instanceStatus.Error)
-		}
-	}
-
-	return result, errs
-}
-
-func getInstanceStatusFromPod(
-	ctx context.Context,
-	config *rest.Config,
-	pod corev1.Pod,
-) postgres.PostgresqlStatus {
-	var result postgres.PostgresqlStatus
-
-	statusResult, err := kubernetes.NewForConfigOrDie(config).
-		CoreV1().
-		Pods(pod.Namespace).
-		ProxyGet(
-			remote.GetStatusSchemeFromPod(&pod).ToString(),
-			pod.Name,
-			strconv.Itoa(int(url.StatusPort)),
-			url.PathPgStatus,
-			nil,
-		).
-		DoRaw(ctx)
-	if err != nil {
-		result.AddPod(pod)
-		result.Error = fmt.Errorf(
-			"failed to get status by proxying to the pod, you might lack permissions to get pods/proxy: %w",
-			err)
-		return result
-	}
-
-	if err := json.Unmarshal(statusResult, &result); err != nil {
-		result.Error = fmt.Errorf("can't parse pod output")
-	}
-
-	result.AddPod(pod)
-
-	return result
 }
 
 // IsInstanceRunning returns a boolean indicating if the given instance is running and any error encountered
