@@ -1118,6 +1118,8 @@ func (r *InstanceReconciler) reconcilePrimary(ctx context.Context, cluster *apiv
 		return nil
 	}
 
+	// This is the point where the real reconciliation logic is
+
 	oldCluster := cluster.DeepCopy()
 	isPrimary, err := r.instance.IsPrimary()
 	if err != nil {

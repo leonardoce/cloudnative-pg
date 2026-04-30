@@ -88,19 +88,12 @@ IS PG PRIMARY?
 
 ## Implementation Plan
 
-### Step 1 — RBAC and Lease creation
-
-The operator creates and owns the `Lease` object (named after the cluster) during cluster reconciliation, and deletes it when the cluster is deleted. The instance manager is granted `get`/`update`/`patch` on that object, scoped via `resourceNames` to the cluster name — `create` is not needed since the operator owns creation.
-
-No new API fields: lease timing is hardcoded (see resolved note above).
-
 ### Step 2 — Instance manager: lease runnable
 
 Implement a runnable that is **always started on every instance** (primary and replica alike). It has the following contract:
 
 - Starts **idle** — holds no lock and attempts no acquisition.
-- Exposes an `activate()` method to kick off the acquisition/renewal loop.
-- Exposes a method that **blocks until the lease is held**, used by the startup decision tree and the replica promotion path before calling `pg_promote`.
+- Exposes an `acquire()` method that starts the acquisition/renewal loop and **blocks until the lease is held**. Used by the startup decision tree and the replica promotion path before calling `pg_promote`.
 - Termination behaviour depends on state:
 
   | State | Lease lost | Context cancelled |
@@ -115,9 +108,9 @@ The "cancel root context" on lease loss ensures the whole instance manager proce
 On startup, after determining the Postgres role:
 
 - **Replica** → leave the runnable idle; Postgres starts normally.
-- **Primary, lease held by me** → call `activate()` to adopt; block until the lease is confirmed held; then start Postgres.
-- **Primary, lease free** → call `activate()` to take it; block until the lease is held; then start Postgres.
-- **Primary, lease held by another pod** → do not call `activate()`; demote Postgres and exit.
+- **Primary, lease held by me** → call `acquire()` to adopt and block until confirmed held; then start Postgres.
+- **Primary, lease free** → call `acquire()` to take it and block until held; then start Postgres.
+- **Primary, lease held by another pod** → do not call `acquire()`; demote Postgres and exit.
 
 The lease is the gate: Postgres must never start as primary before the lease is held.
 
@@ -127,7 +120,7 @@ Stop Postgres first, then release the lease. This ensures there is no window whe
 
 ### Step 5 — Instance manager: replica promotion
 
-When `targetPrimary` is set to this pod's name, call `activate()` on the lease runnable, then block until the lease is held before calling `pg_promote`. After promotion, the renewal loop from Step 2 continues running.
+When `targetPrimary` is set to this pod's name, call `acquire()` on the lease runnable and block until the lease is held before calling `pg_promote`. After promotion, the renewal loop from Step 2 continues running.
 
 ### Step 6 — Controller: currentPrimary sync
 
