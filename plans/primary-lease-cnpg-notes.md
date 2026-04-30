@@ -88,21 +88,6 @@ IS PG PRIMARY?
 
 ## Implementation Plan
 
-### Step 2 — Instance manager: lease runnable
-
-Implement a runnable that is **always started on every instance** (primary and replica alike). It has the following contract:
-
-- Starts **idle** — holds no lock and attempts no acquisition.
-- Exposes an `acquire()` method that starts the acquisition/renewal loop and **blocks until the lease is held**. Used by the startup decision tree and the replica promotion path before calling `pg_promote`.
-- Termination behaviour depends on state:
-
-  | State | Lease lost | Context cancelled |
-  |-------|------------|-------------------|
-  | **Idle** | irrelevant — ignore | exit cleanly |
-  | **Active** | cancel root context | stop Postgres, release lease, exit cleanly |
-
-The "cancel root context" on lease loss ensures the whole instance manager process stops when the active holder loses the lease. The distinction between roles is only in *when* (and *whether*) `activate()` is called.
-
 ### Step 3 — Instance manager: startup decision tree
 
 On startup, after determining the Postgres role:

@@ -1118,8 +1118,6 @@ func (r *InstanceReconciler) reconcilePrimary(ctx context.Context, cluster *apiv
 		return nil
 	}
 
-	// This is the point where the real reconciliation logic is
-
 	oldCluster := cluster.DeepCopy()
 	isPrimary, err := r.instance.IsPrimary()
 	if err != nil {
@@ -1177,6 +1175,9 @@ func (r *InstanceReconciler) reconcilePrimary(ctx context.Context, cluster *apiv
 func (r *InstanceReconciler) handlePromotion(ctx context.Context, cluster *apiv1.Cluster) error {
 	contextLogger := log.FromContext(ctx)
 	contextLogger.Info("I'm the target primary, wait for the wal_receiver to be terminated")
+
+	// Here we should try to acquire our lock
+
 	if r.instance.GetPodName() != cluster.Status.CurrentPrimary {
 		// if the cluster is not replicating it means it's doing a failover and
 		// we have to wait for wal receivers to be down
