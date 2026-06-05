@@ -301,6 +301,12 @@ type ClusterSpec struct {
 	// +optional
 	Bootstrap *BootstrapConfiguration `json:"bootstrap,omitempty"`
 
+	// Instructions to bootstrap new replicas joining this cluster.
+	// When unset, replicas are bootstrapped via `pg_basebackup` from the
+	// primary (the historical default).
+	// +optional
+	ReplicaBootstrap *ReplicaBootstrapConfiguration `json:"replicaBootstrap,omitempty"`
+
 	// Replica cluster configuration
 	// +optional
 	ReplicaCluster *ReplicaClusterConfiguration `json:"replica,omitempty"`
@@ -2205,6 +2211,50 @@ type BootstrapPgBaseBackup struct {
 	// created from scratch
 	// +optional
 	Secret *LocalObjectReference `json:"secret,omitempty"`
+}
+
+// ReplicaBootstrapConfiguration contains information about how to bootstrap
+// new replicas that join an existing CloudNativePG cluster. Exactly one of
+// the supported methods must be specified. When the parent field is left
+// unset, replicas are bootstrapped via `pg_basebackup` from the primary.
+// +kubebuilder:validation:XValidation:rule="has(self.pgBasebackup) != has(self.recovery)",message="exactly one of pgBasebackup or recovery must be set"
+type ReplicaBootstrapConfiguration struct {
+	// Bootstrap new replicas by streaming a physical base backup from the
+	// current primary using `pg_basebackup`. This is the historical default
+	// and reserves no parameters today; the empty struct exists so that
+	// future options can be added without an API break.
+	// +optional
+	PgBasebackup *ReplicaBootstrapPgBaseBackup `json:"pgBasebackup,omitempty"`
+
+	// Bootstrap new replicas by restoring the latest successful Backup of
+	// the chosen method, instead of loading the primary.
+	// +optional
+	Recovery *ReplicaBootstrapRecovery `json:"recovery,omitempty"`
+}
+
+// ReplicaBootstrapPgBaseBackup selects the legacy `pg_basebackup`-from-primary
+// strategy for new replicas. Empty by design.
+type ReplicaBootstrapPgBaseBackup struct{}
+
+// ReplicaBootstrapRecovery configures replica bootstrap by restoring from a
+// Backup resource produced by the cluster's own backup pipeline. The
+// operator will pick the latest successful Backup that matches `method`
+// (and `pluginName` when applicable) at the moment the bootstrap Job
+// starts.
+// +kubebuilder:validation:XValidation:rule="self.method != 'plugin' || (has(self.pluginName) && size(self.pluginName) > 0)",message="pluginName is required when method is plugin"
+// +kubebuilder:validation:XValidation:rule="self.method == 'plugin' || !has(self.pluginName)",message="pluginName must be absent unless method is plugin"
+type ReplicaBootstrapRecovery struct {
+	// Method selects which kind of Backup to restore from. The value uses
+	// the same vocabulary as `BackupSpec.method` so that operators and
+	// users see consistent naming across resources.
+	// +kubebuilder:validation:Enum=barmanObjectStore;volumeSnapshot;plugin
+	Method BackupMethod `json:"method"`
+
+	// PluginName selects which backup plugin's Backups are eligible.
+	// Required when `method` is `plugin`; must be omitted for every other
+	// method.
+	// +optional
+	PluginName string `json:"pluginName,omitempty"`
 }
 
 // RecoveryTarget allows to configure the moment where the recovery process

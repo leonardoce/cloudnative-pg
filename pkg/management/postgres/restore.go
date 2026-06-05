@@ -212,6 +212,17 @@ func (info InitInfo) concludeRestore(
 		return err
 	}
 
+	if info.Immediate {
+		// Replica bootstrap from a Backup: attach as a streaming standby of
+		// the cluster's primary. Demote writes standby.signal and an
+		// override.conf wiring primary_conninfo plus a restore_command that
+		// pulls from the cluster's own WAL archive for catch-up.
+		if err := info.GetInstance(nil).Demote(ctx, cluster); err != nil {
+			return fmt.Errorf("error while demoting the instance: %w", err)
+		}
+		return nil
+	}
+
 	if err := info.WriteRestoreHbaConf(ctx); err != nil {
 		return err
 	}
@@ -266,6 +277,38 @@ func (info InitInfo) createEnvAndConfigForSnapshotRestore(
 	return env, config, err
 }
 
+// resolveRestorePluginName picks the plugin (if any) that should drive the
+// restore. When the operator pre-selected a specific Backup via
+// info.BackupName, its own Spec.Method is authoritative; this is the path
+// used for replica bootstrap. Otherwise we fall back to the historical
+// rule of inspecting Cluster.Spec.Bootstrap.Recovery.
+func (info InitInfo) resolveRestorePluginName(
+	ctx context.Context,
+	cli client.Client,
+	cluster *apiv1.Cluster,
+) (string, error) {
+	if info.BackupName == "" {
+		if p := cluster.GetRecoverySourcePlugin(); p != nil {
+			return p.Name, nil
+		}
+		return "", nil
+	}
+
+	var selectedBackup apiv1.Backup
+	if err := cli.Get(
+		ctx,
+		client.ObjectKey{Namespace: info.Namespace, Name: info.BackupName},
+		&selectedBackup,
+	); err != nil {
+		return "", fmt.Errorf("while loading selected Backup %q: %w", info.BackupName, err)
+	}
+	if selectedBackup.Spec.Method != apiv1.BackupMethodPlugin ||
+		selectedBackup.Spec.PluginConfiguration == nil {
+		return "", nil
+	}
+	return selectedBackup.Spec.PluginConfiguration.Name, nil
+}
+
 // Restore restores a PostgreSQL cluster from a backup into the object storage
 func (info InitInfo) Restore(ctx context.Context, cli client.Client) error {
 	contextLogger := log.FromContext(ctx)
@@ -288,10 +331,15 @@ func (info InitInfo) Restore(ctx context.Context, cli client.Client) error {
 	var envs []string
 	var config string
 
+	pluginName, err := info.resolveRestorePluginName(ctx, cli, cluster)
+	if err != nil {
+		return err
+	}
+
 	//nolint:nestif
-	if pluginConfiguration := cluster.GetRecoverySourcePlugin(); pluginConfiguration != nil {
-		contextLogger.Info("Restore through plugin detected, proceeding...")
-		res, err := restoreViaPlugin(ctx, cluster, pluginConfiguration)
+	if pluginName != "" {
+		contextLogger.Info("Restore through plugin detected, proceeding...", "plugin", pluginName)
+		res, err := restoreViaPlugin(ctx, cluster, pluginName)
 		if err != nil {
 			return err
 		}
@@ -483,9 +531,16 @@ func (info InitInfo) loadBackup(
 	typedClient client.Client,
 	cluster *apiv1.Cluster,
 ) (*apiv1.Backup, []string, error) {
+	// An explicit Backup name takes priority over what the Cluster spec
+	// would otherwise indicate. This is the path used when bootstrapping a
+	// replica from a Backup selected by the operator.
+	if info.BackupName != "" {
+		return info.loadBackupByName(ctx, typedClient, info.BackupName)
+	}
+
 	// Recovery given an existing backup
 	if cluster.Spec.Bootstrap.Recovery.Backup != nil {
-		return info.loadBackupFromReference(ctx, typedClient, cluster)
+		return info.loadBackupByName(ctx, typedClient, cluster.Spec.Bootstrap.Recovery.Backup.Name)
 	}
 
 	return info.loadBackupObjectFromExternalCluster(ctx, typedClient, cluster)
@@ -579,17 +634,17 @@ func (info InitInfo) loadBackupObjectFromExternalCluster(
 	}, env, nil
 }
 
-// loadBackupFromReference loads a backup object and the required credentials given the backup object resource
-func (info InitInfo) loadBackupFromReference(
+// loadBackupByName loads a backup object and the required credentials given its name
+func (info InitInfo) loadBackupByName(
 	ctx context.Context,
 	typedClient client.Client,
-	cluster *apiv1.Cluster,
+	name string,
 ) (*apiv1.Backup, []string, error) {
 	contextLogger := log.FromContext(ctx)
 	var backup apiv1.Backup
 	err := typedClient.Get(
 		ctx,
-		client.ObjectKey{Namespace: info.Namespace, Name: cluster.Spec.Bootstrap.Recovery.Backup.Name},
+		client.ObjectKey{Namespace: info.Namespace, Name: name},
 		&backup)
 	if err != nil {
 		return nil, nil, err
@@ -598,7 +653,7 @@ func (info InitInfo) loadBackupFromReference(
 	env, err := barmanCredentials.EnvSetRestoreCloudCredentials(
 		ctx,
 		typedClient,
-		cluster.Namespace,
+		info.Namespace,
 		&apiv1.BarmanObjectStoreConfiguration{
 			BarmanCredentials: backup.Status.BarmanCredentials,
 			EndpointCA:        backup.Status.EndpointCA,
@@ -1060,7 +1115,7 @@ func waitUntilRecoveryFinishes(db *sql.DB) error {
 func restoreViaPlugin(
 	ctx context.Context,
 	cluster *apiv1.Cluster,
-	plugin *apiv1.PluginConfiguration,
+	pluginName string,
 ) (*restore.RestoreResponse, error) {
 	contextLogger := log.FromContext(ctx)
 
@@ -1068,7 +1123,7 @@ func restoreViaPlugin(
 	defer plugins.Close()
 
 	pluginEnabledSet := stringset.New()
-	pluginEnabledSet.Put(plugin.Name)
+	pluginEnabledSet.Put(pluginName)
 	pClient, err := pluginClient.NewClient(ctx, pluginEnabledSet)
 	if err != nil {
 		contextLogger.Error(err, "Error while loading required plugins")

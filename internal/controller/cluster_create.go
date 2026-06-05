@@ -1396,11 +1396,37 @@ func (r *ClusterReconciler) joinReplicaInstance(
 	}
 
 	job := specs.JoinReplicaInstance(*cluster, nodeSerial)
+	var storageSource *persistentvolumeclaim.StorageSource
+	bootstrapMethod := utils.PVCBootstrapMethodPgBasebackup
+	bootstrapSource := cluster.Status.CurrentPrimary
 
-	// If we can bootstrap this replica from a pre-existing source, we do it
-	storageSource := persistentvolumeclaim.GetCandidateStorageSourceForReplica(ctx, r.Client, cluster, backupList)
-	if storageSource != nil {
-		job = specs.RestoreReplicaInstance(*cluster, nodeSerial)
+	if cluster.Spec.ReplicaBootstrap != nil && cluster.Spec.ReplicaBootstrap.Recovery != nil {
+		selectedBackup, err := selectReplicaBootstrapBackup(cluster, backupList)
+		if err != nil {
+			r.Recorder.Eventf(cluster, "Warning", "ReplicaBootstrapBlocked",
+				"Cannot bootstrap replica %v-%v: %v", cluster.Name, nodeSerial, err)
+			contextLogger.Info("Replica bootstrap from recovery cannot proceed",
+				"nodeSerial", nodeSerial, "reason", err.Error())
+			return ctrl.Result{RequeueAfter: time.Minute}, nil
+		}
+		switch selectedBackup.Spec.Method {
+		case apiv1.BackupMethodVolumeSnapshot:
+			storageSource = persistentvolumeclaim.GetCandidateSourceFromBackup(selectedBackup)
+			job = specs.RestoreReplicaInstance(*cluster, nodeSerial)
+			bootstrapMethod = utils.PVCBootstrapMethodVolumeSnapshot
+		case apiv1.BackupMethodBarmanObjectStore, "":
+			job = specs.RecoverReplicaInstance(*cluster, nodeSerial, selectedBackup)
+			bootstrapMethod = utils.PVCBootstrapMethodBarmanObjectStore
+		case apiv1.BackupMethodPlugin:
+			job = specs.RecoverReplicaInstance(*cluster, nodeSerial, selectedBackup)
+			bootstrapMethod = utils.PVCBootstrapMethodPlugin
+		default:
+			r.Recorder.Eventf(cluster, "Warning", "ReplicaBootstrapNotImplemented",
+				"replicaBootstrap.recovery with method %q is not yet supported",
+				selectedBackup.Spec.Method)
+			return ctrl.Result{RequeueAfter: time.Minute}, nil
+		}
+		bootstrapSource = selectedBackup.Name
 	}
 
 	contextLogger.Info("Creating new Job",
@@ -1458,7 +1484,7 @@ func (r *ClusterReconciler) joinReplicaInstance(
 		return ctrl.Result{}, fmt.Errorf("cannot create replica instance PVCs: %w", err)
 	}
 
-	r.stampReplicaBootstrapAnnotations(ctx, cluster, nodeSerial, storageSource)
+	r.stampReplicaBootstrapAnnotations(ctx, cluster, nodeSerial, bootstrapMethod, bootstrapSource)
 
 	return ctrl.Result{RequeueAfter: 30 * time.Second}, ErrNextLoop
 }
@@ -1470,15 +1496,9 @@ func (r *ClusterReconciler) stampReplicaBootstrapAnnotations(
 	ctx context.Context,
 	cluster *apiv1.Cluster,
 	nodeSerial int,
-	storageSource *persistentvolumeclaim.StorageSource,
+	method utils.PVCBootstrapMethod,
+	source string,
 ) {
-	method := utils.PVCBootstrapMethodPgBasebackup
-	source := cluster.Status.CurrentPrimary
-	if storageSource != nil {
-		method = utils.PVCBootstrapMethodVolumeSnapshot
-		source = storageSource.DataSource.Name
-	}
-
 	instanceName := specs.GetInstanceName(cluster.Name, nodeSerial)
 	if err := persistentvolumeclaim.EnsureInstanceBootstrapAnnotations(
 		ctx, r.Client, cluster, instanceName, method, source,

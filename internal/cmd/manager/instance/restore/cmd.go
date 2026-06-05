@@ -49,6 +49,8 @@ func NewCmd() *cobra.Command {
 		namespace   string
 		pgData      string
 		pgWal       string
+		backupName  string
+		immediate   bool
 	)
 
 	cmd := &cobra.Command{
@@ -89,6 +91,8 @@ func NewCmd() *cobra.Command {
 				namespace:   namespace,
 				pgData:      pgData,
 				pgWal:       pgWal,
+				backupName:  backupName,
+				immediate:   immediate,
 				cancel:      cancel,
 			}
 			if mgr.Add(&restoreProcess) != nil {
@@ -125,6 +129,11 @@ func NewCmd() *cobra.Command {
 		"the cluster and the Pod in k8s")
 	cmd.Flags().StringVar(&pgData, "pg-data", os.Getenv("PGDATA"), "The PGDATA to be restored")
 	cmd.Flags().StringVar(&pgWal, "pg-wal", "", "The PGWAL to be restored")
+	cmd.Flags().StringVar(&backupName, "backup-name", "",
+		"The name of the Backup resource to restore from. "+
+			"When empty, the source is taken from the Cluster's spec.bootstrap.recovery.")
+	cmd.Flags().BoolVar(&immediate, "immediate", false,
+		"Configure the recovered instance as a streaming standby instead of promoting it")
 
 	return cmd
 }

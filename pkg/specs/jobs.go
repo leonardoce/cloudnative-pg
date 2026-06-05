@@ -296,6 +296,33 @@ func RestoreReplicaInstance(cluster apiv1.Cluster, nodeSerial int) *batchv1.Job 
 	return job
 }
 
+// RecoverReplicaInstance creates a new PostgreSQL replica by downloading the
+// given Backup from object storage and configuring it to come up as a
+// streaming standby of the cluster's primary.
+func RecoverReplicaInstance(cluster apiv1.Cluster, nodeSerial int, backup *apiv1.Backup) *batchv1.Job {
+	commonFlags := buildCommonInitJobFlags(cluster)
+	initCommand := make([]string, 0, 6+len(commonFlags))
+	initCommand = append(initCommand,
+		"/controller/manager",
+		"instance",
+		"restore",
+		"--backup-name", backup.Name,
+		"--immediate",
+	)
+
+	initCommand = append(initCommand, commonFlags...)
+
+	job := CreatePrimaryJob(cluster, nodeSerial, jobRoleFullRecovery, initCommand, getExtensions(&cluster))
+
+	if backup.Status.EndpointCA != nil &&
+		backup.Status.EndpointCA.Name != "" &&
+		backup.Status.EndpointCA.Key != "" {
+		AddBarmanEndpointCAToPodSpec(&job.Spec.Template.Spec, backup.Status.EndpointCA, backup.Status.BarmanCredentials)
+	}
+
+	return job
+}
+
 func buildCommonInitJobFlags(cluster apiv1.Cluster) []string {
 	var flags []string
 

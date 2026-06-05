@@ -5536,6 +5536,53 @@ spec:
                 required:
                 - source
                 type: object
+              replicaBootstrap:
+                description: |-
+                  Instructions to bootstrap new replicas joining this cluster.
+                  When unset, replicas are bootstrapped via `pg_basebackup` from the
+                  primary (the historical default).
+                properties:
+                  pgBasebackup:
+                    description: |-
+                      Bootstrap new replicas by streaming a physical base backup from the
+                      current primary using `pg_basebackup`. This is the historical default
+                      and reserves no parameters today; the empty struct exists so that
+                      future options can be added without an API break.
+                    type: object
+                  recovery:
+                    description: |-
+                      Bootstrap new replicas by restoring the latest successful Backup of
+                      the chosen method, instead of loading the primary.
+                    properties:
+                      method:
+                        description: |-
+                          Method selects which kind of Backup to restore from. The value uses
+                          the same vocabulary as `BackupSpec.method` so that operators and
+                          users see consistent naming across resources.
+                        enum:
+                        - barmanObjectStore
+                        - volumeSnapshot
+                        - plugin
+                        type: string
+                      pluginName:
+                        description: |-
+                          PluginName selects which backup plugin's Backups are eligible.
+                          Required when `method` is `plugin`; must be omitted for every other
+                          method.
+                        type: string
+                    required:
+                    - method
+                    type: object
+                    x-kubernetes-validations:
+                    - message: pluginName is required when method is plugin
+                      rule: self.method != 'plugin' || (has(self.pluginName) && size(self.pluginName)
+                        > 0)
+                    - message: pluginName must be absent unless method is plugin
+                      rule: self.method == 'plugin' || !has(self.pluginName)
+                type: object
+                x-kubernetes-validations:
+                - message: exactly one of pgBasebackup or recovery must be set
+                  rule: has(self.pgBasebackup) != has(self.recovery)
               replicationSlots:
                 default:
                   highAvailability:

@@ -125,6 +125,16 @@ type InitInfo struct {
 
 	// TablespaceMapFile holds the content returned by pg_stop_backup. Needed for a hot backup restore
 	TablespaceMapFile []byte
+
+	// BackupName, when non-empty, names a specific Backup resource that drives
+	// the restore. When empty, the restore source is inferred from the Cluster's
+	// spec.bootstrap.recovery section.
+	BackupName string
+
+	// Immediate configures the recovered instance to come up as a streaming
+	// standby instead of being promoted to primary. Used when bootstrapping a
+	// replica from a Backup.
+	Immediate bool
 }
 
 // EnsureTargetDirectoriesDoNotExist ensures that the target data and WAL directories do not exist.

@@ -40,6 +40,8 @@ type restoreRunnable struct {
 	namespace   string
 	pgData      string
 	pgWal       string
+	backupName  string
+	immediate   bool
 	cancel      context.CancelFunc
 }
 
@@ -57,6 +59,8 @@ func (r *restoreRunnable) Start(ctx context.Context) error {
 		Namespace:   r.namespace,
 		PgData:      r.pgData,
 		PgWal:       r.pgWal,
+		BackupName:  r.backupName,
+		Immediate:   r.immediate,
 	}
 
 	if err := restoreSubCommand(ctx, info, r.cli); err != nil {
