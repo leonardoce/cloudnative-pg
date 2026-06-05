@@ -151,6 +151,40 @@ const (
 
 	// LivenessPingerAnnotationName is the name of the pinger configuration
 	LivenessPingerAnnotationName = AlphaMetadataNamespace + "/livenessPinger"
+
+	// BootstrapMethodAnnotationName records on a PGDATA PVC which method was
+	// used to seed the data directory at instance creation time. The PVC
+	// outlives the Pod (which is recreated on every restart/upgrade) so it
+	// is the natural carrier for this provenance.
+	BootstrapMethodAnnotationName = MetadataNamespace + "/bootstrap-method"
+
+	// BootstrappedFromAnnotationName records on a PGDATA PVC the concrete
+	// source that fed it: the primary instance name for pg_basebackup, the
+	// Backup name (or artifact identifier) for recovery-based bootstrap.
+	BootstrappedFromAnnotationName = MetadataNamespace + "/bootstrapped-from"
+)
+
+// PVCBootstrapMethod identifies how a PGDATA PVC was seeded. These values
+// are recorded under BootstrapMethodAnnotationName and intentionally share
+// vocabulary with apiv1.BackupMethod where applicable.
+type PVCBootstrapMethod string
+
+const (
+	// PVCBootstrapMethodPgBasebackup means the PVC was filled by
+	// `pg_basebackup` streaming from the current primary.
+	PVCBootstrapMethodPgBasebackup PVCBootstrapMethod = "pgBasebackup"
+
+	// PVCBootstrapMethodVolumeSnapshot means the PVC was restored from a
+	// CSI VolumeSnapshot.
+	PVCBootstrapMethodVolumeSnapshot PVCBootstrapMethod = "volumeSnapshot"
+
+	// PVCBootstrapMethodBarmanObjectStore means the PVC was restored from
+	// a barman object-store backup.
+	PVCBootstrapMethodBarmanObjectStore PVCBootstrapMethod = "barmanObjectStore"
+
+	// PVCBootstrapMethodPlugin means the PVC was restored by a CNPG-i
+	// backup plugin.
+	PVCBootstrapMethodPlugin PVCBootstrapMethod = "plugin"
 )
 
 const (

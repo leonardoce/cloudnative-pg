@@ -1458,7 +1458,34 @@ func (r *ClusterReconciler) joinReplicaInstance(
 		return ctrl.Result{}, fmt.Errorf("cannot create replica instance PVCs: %w", err)
 	}
 
+	r.stampReplicaBootstrapAnnotations(ctx, cluster, nodeSerial, storageSource)
+
 	return ctrl.Result{RequeueAfter: 30 * time.Second}, ErrNextLoop
+}
+
+// stampReplicaBootstrapAnnotations records on the PGDATA PVC how the replica
+// was seeded. The stamp is observability only: a failure is logged but does
+// not surface as a reconcile error.
+func (r *ClusterReconciler) stampReplicaBootstrapAnnotations(
+	ctx context.Context,
+	cluster *apiv1.Cluster,
+	nodeSerial int,
+	storageSource *persistentvolumeclaim.StorageSource,
+) {
+	method := utils.PVCBootstrapMethodPgBasebackup
+	source := cluster.Status.CurrentPrimary
+	if storageSource != nil {
+		method = utils.PVCBootstrapMethodVolumeSnapshot
+		source = storageSource.DataSource.Name
+	}
+
+	instanceName := specs.GetInstanceName(cluster.Name, nodeSerial)
+	if err := persistentvolumeclaim.EnsureInstanceBootstrapAnnotations(
+		ctx, r.Client, cluster, instanceName, method, source,
+	); err != nil {
+		log.FromContext(ctx).Error(err, "Unable to stamp bootstrap annotations on PVCs",
+			"instance", instanceName)
+	}
 }
 
 // ensureInstancesAreCreated recreates any missing instance
