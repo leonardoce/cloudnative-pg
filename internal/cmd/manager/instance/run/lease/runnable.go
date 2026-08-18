@@ -293,7 +293,13 @@ func classifyLeaseAfterRun(
 // clock (the same limitation client-go's elector has); it only adds latency in
 // the rare case of a restart mid-take-over, never correctness.
 func (r *Runnable) tryTakeOver(ctx context.Context) (bool, error) {
-	record, _, err := r.lock.Get(ctx)
+	// Bounded so a Get against an unreachable API server fails fast and
+	// retries at RetryPeriod cadence, instead of blocking the whole
+	// take-over loop for however long the underlying transport takes to
+	// give up on its own.
+	getCtx, cancel := context.WithTimeout(ctx, r.config.RetryPeriod)
+	record, _, err := r.lock.Get(getCtx)
+	cancel()
 	if errors.IsNotFound(err) {
 		// The cluster controller owns lease creation; nothing to take over yet.
 		r.observedRecord = nil
