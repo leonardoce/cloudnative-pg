@@ -33,6 +33,7 @@ import (
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/cloudnative-pg/cloudnative-pg/internal/management/watchdog"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/postgres"
 )
 
@@ -57,6 +58,14 @@ const (
 	// treat an empty identity as immediately available, it waits at most one
 	// second before the TTL expires and it can take the lease.
 	defaultReleasedLeaseDuration = 1 * time.Second
+
+	// defaultWatchdogMaxSilence is how long the lease loop can go without
+	// attempting a lock operation before the watchdog considers it stuck.
+	// It only needs to absorb jitter internal to the loop itself (scheduling
+	// delays, a GC pause) between Beat() calls spaced defaultRetryPeriod
+	// apart — the liveness probe's own failure-threshold debounce separately
+	// covers transient probe-call flakiness on top of this.
+	defaultWatchdogMaxSilence = 5 * defaultRetryPeriod
 )
 
 // Config holds the tunable timings of the primary lease. They mirror the
@@ -91,7 +100,14 @@ func defaultConfig() Config {
 // It starts idle and enters the acquisition/renewal loop only after Acquire is called.
 type Runnable struct {
 	instance *postgres.Instance
-	lock     *resourcelock.LeaseLock
+	// lock is wrapped by watchdog.WrapLock, so every Get/Update attempt made
+	// through it - by preAcquire/claim below or by client-go's elector -
+	// beats the watchdog, whether or not the attempt succeeds.
+	lock resourcelock.Interface
+
+	// watchdog reports whether the lease loop is still attempting lock
+	// operations, independent of whether those operations succeed.
+	watchdog *watchdog.LeaseWatchdog
 
 	// config holds the lease timings. It is initialised to the defaults by New
 	// and overwritten by the first Acquire call before the runnable activates.
@@ -125,10 +141,12 @@ func New(
 	kubeClient kubernetes.Interface,
 	instance *postgres.Instance,
 ) *Runnable {
+	leaseWatchdog := watchdog.NewLeaseWatchdog(defaultWatchdogMaxSilence)
+
 	return &Runnable{
 		instance: instance,
 		config:   defaultConfig(),
-		lock: &resourcelock.LeaseLock{
+		lock: leaseWatchdog.WrapLock(&resourcelock.LeaseLock{
 			LeaseMeta: metav1.ObjectMeta{
 				Namespace: instance.GetNamespaceName(),
 				Name:      instance.GetClusterName(),
@@ -141,11 +159,20 @@ func New(
 				// this Identity is the legitimate holder.
 				Identity: instance.GetPodName(),
 			},
-		},
+		}),
+		watchdog:      leaseWatchdog,
 		activateCh:    make(chan struct{}),
 		heldCh:        make(chan struct{}),
 		checkStepDown: shouldStepDown,
 	}
+}
+
+// Watchdog reports whether the lease loop is still attempting lock
+// operations. A stale watchdog means the loop has wedged; it does not mean
+// lease renewal is failing (see checkStepDown for that, separately handled,
+// expected condition).
+func (r *Runnable) Watchdog() *watchdog.LeaseWatchdog {
+	return r.watchdog
 }
 
 // Acquire signals the runnable to start competing for the lease using the
@@ -209,7 +236,7 @@ func (r *Runnable) Release(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if record.HolderIdentity != r.lock.LockConfig.Identity {
+	if record.HolderIdentity != r.lock.Identity() {
 		contextLogger.Debug("Primary lease held by another identity, nothing to release",
 			"holder", record.HolderIdentity)
 		return nil
@@ -347,7 +374,7 @@ func (r *Runnable) tryTakeOver(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	identity := r.lock.LockConfig.Identity
+	identity := r.lock.Identity()
 
 	// Already ours: nothing to do here, le.Run will refresh the RenewTime.
 	if record.HolderIdentity == identity {
@@ -392,7 +419,7 @@ func sameHolder(a, b *resourcelock.LeaderElectionRecord) bool {
 func (r *Runnable) claim(ctx context.Context, current *resourcelock.LeaderElectionRecord) (bool, error) {
 	now := metav1.NewTime(time.Now())
 	if err := r.lock.Update(ctx, resourcelock.LeaderElectionRecord{
-		HolderIdentity:       r.lock.LockConfig.Identity,
+		HolderIdentity:       r.lock.Identity(),
 		LeaseDurationSeconds: int(r.config.LeaseDuration / time.Second),
 		RenewTime:            now,
 		AcquireTime:          now,
@@ -507,6 +534,7 @@ func (r *Runnable) runLeaderElection(ctx context.Context) error {
 		acquiredBefore = true
 		r.heldOnce.Do(func() {
 			contextLogger.Info("Acquired primary lease")
+			r.watchdog.MarkAcquired()
 			close(r.heldCh)
 		})
 
@@ -551,7 +579,7 @@ func (r *Runnable) runLeaderElection(ctx context.Context) error {
 		record, _, checkErr := r.lock.Get(checkCtx)
 		checkCancel()
 
-		switch classifyLeaseAfterRun(checkErr, record, r.lock.LockConfig.Identity) {
+		switch classifyLeaseAfterRun(checkErr, record, r.lock.Identity()) {
 		case leaseMissing:
 			// The lease object is gone (e.g. someone deleted it). The cluster
 			// controller will recreate it on its next reconcile; loop and let
