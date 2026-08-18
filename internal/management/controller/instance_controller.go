@@ -237,6 +237,10 @@ func (r *InstanceReconciler) Reconcile(
 	}
 
 	if err := r.instance.IsReady(); err != nil {
+		if shutDown, err := r.shutdownUnreachableOldPrimary(ctx, cluster); err != nil || shutDown {
+			return reconcile.Result{}, err
+		}
+
 		contextLogger.Info("Instance is still down, will retry in 1 second")
 		return reconcile.Result{RequeueAfter: time.Second}, nil
 	}
@@ -639,6 +643,46 @@ func (r *InstanceReconciler) reconcileOldPrimary(
 	<-ctx.Done()
 
 	cluster.LogTimestampsWithMessage(ctx, "Old primary shutdown complete")
+
+	return true, nil
+}
+
+// shutdownUnreachableOldPrimary shuts down PostgreSQL, with no attempt at a checkpoint,
+// when this instance is configured as a primary but is no longer the target primary
+// according to the Cluster status, and PostgreSQL is not reachable.
+//
+// A checkpoint requires a working connection to PostgreSQL, which by definition we don't
+// have here, so unlike reconcileOldPrimary we skip straight to requesting the shutdown.
+func (r *InstanceReconciler) shutdownUnreachableOldPrimary(
+	ctx context.Context,
+	cluster *apiv1.Cluster,
+) (shutDown bool, err error) {
+	contextLogger := log.FromContext(ctx)
+
+	if cluster.Status.TargetPrimary == r.instance.GetPodName() {
+		return false, nil
+	}
+
+	isPrimary, err := r.instance.IsPrimary()
+	if err != nil || !isPrimary {
+		return false, err
+	}
+
+	contextLogger.Info(
+		"This is an unreachable former primary instance. Shutting it down immediately, with no " +
+			"checkpoint and no fast-shutdown attempt, so a new primary can be promoted as soon as possible.")
+
+	// Skip straight to an immediate shutdown: PostgreSQL isn't reachable, so a "fast"
+	// attempt would just burn through its own timeout waiting on a postmaster that
+	// can't respond, delaying the failover for no benefit.
+	r.Instance().RequestImmediateShutdown()
+
+	// We wait for the lifecycle manager to have received the immediate shutdown request
+	// and, having processed it, to request the termination of the instance manager.
+	// When the termination has been requested, this context will be cancelled.
+	<-ctx.Done()
+
+	cluster.LogTimestampsWithMessage(ctx, "Unreachable old primary shutdown complete")
 
 	return true, nil
 }
