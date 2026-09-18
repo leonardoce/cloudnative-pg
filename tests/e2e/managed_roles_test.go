@@ -197,7 +197,8 @@ var _ = Describe("Managed roles tests", Label(tests.LabelSmoke, tests.LabelBasic
 			By("Verifying connectivity of new managed role", func() {
 				rwService := services.GetReadWriteServiceName(clusterName)
 				// assert connectable use username and password defined in secrets
-				pgasserts.AssertConnection(env, namespace, rwService, postgres.PostgresDBName, username, password)
+				pgasserts.AssertConnection(env, namespace, rwService, postgres.PostgresDBName, username, password,
+					RetryTimeout)
 			})
 
 			By("ensuring a pre-hashed password secret is stored verbatim in pg_authid", func() {
@@ -227,6 +228,7 @@ var _ = Describe("Managed roles tests", Label(tests.LabelSmoke, tests.LabelBasic
 				pgasserts.AssertConnection(
 					env, namespace, rwService, postgres.PostgresDBName,
 					userWithHashedPassword, userWithHashedPasswordCleartext,
+					RetryTimeout,
 				)
 			})
 
@@ -258,7 +260,8 @@ var _ = Describe("Managed roles tests", Label(tests.LabelSmoke, tests.LabelBasic
 				pass := string(appUserSecret.Data["password"])
 				rwService := services.GetReadWriteServiceName(clusterName)
 				// assert connectable use username and password defined in secrets
-				pgasserts.AssertConnection(env, namespace, rwService, postgres.PostgresDBName, appUsername, pass)
+				pgasserts.AssertConnection(env, namespace, rwService, postgres.PostgresDBName, appUsername, pass,
+					RetryTimeout)
 			})
 
 			By("Verify show unrealizable role configurations in the status", func() {
@@ -340,7 +343,8 @@ var _ = Describe("Managed roles tests", Label(tests.LabelSmoke, tests.LabelBasic
 			By("the connectivity should be success again", func() {
 				rwService := services.GetReadWriteServiceName(clusterName)
 				// assert connectable use username and password defined in secrets
-				pgasserts.AssertConnection(env, namespace, rwService, postgres.PostgresDBName, username, password)
+				pgasserts.AssertConnection(env, namespace, rwService, postgres.PostgresDBName, username, password,
+					RetryTimeout)
 			})
 		})
 
@@ -535,8 +539,12 @@ var _ = Describe("Managed roles tests", Label(tests.LabelSmoke, tests.LabelBasic
 
 			By("Verify connectivity using changed password in secret", func() {
 				rwService := services.GetReadWriteServiceName(clusterName)
-				// assert connectable use username and password defined in secrets
-				pgasserts.AssertConnection(env, namespace, rwService, postgres.PostgresDBName, username, newPassword)
+				// assert connectable use username and password defined in secrets.
+				// The instance manager only learns about the change once kubelet
+				// resyncs the secrets bundle mounted in the Pod, which can take
+				// well over RetryTimeout on a busy cluster.
+				pgasserts.AssertConnection(env, namespace, rwService, postgres.PostgresDBName, username, newPassword,
+					SecretMountSyncTimeout)
 			})
 
 			By("Update password in database", func() {
@@ -556,7 +564,8 @@ var _ = Describe("Managed roles tests", Label(tests.LabelSmoke, tests.LabelBasic
 
 			By("Verify password in secrets is still valid", func() {
 				rwService := services.GetReadWriteServiceName(clusterName)
-				pgasserts.AssertConnection(env, namespace, rwService, postgres.PostgresDBName, username, newPassword)
+				pgasserts.AssertConnection(env, namespace, rwService, postgres.PostgresDBName, username, newPassword,
+					RetryTimeout)
 			})
 		})
 

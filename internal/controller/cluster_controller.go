@@ -1605,9 +1605,46 @@ func (r *ClusterReconciler) mapSecretsToClusters() handler.MapFunc {
 			log.FromContext(ctx).Error(err, "while getting cluster list", "namespace", secret.Namespace)
 			return nil
 		}
-		// build requests for cluster referring the secret
-		return filterClustersUsingSecret(clusters, secret)
+
+		// build requests for clusters referring the secret directly
+		requests := filterClustersUsingSecret(clusters, secret)
+
+		// DatabaseRole password secrets aren't reflected in Cluster.Spec/Status,
+		// so filterClustersUsingSecret alone can't see them: list the
+		// DatabaseRoles in this namespace and match those separately. Any
+		// duplicate request is deduplicated by the controller's workqueue.
+		var databaseRoles apiv1.DatabaseRoleList
+		if err := r.List(ctx, &databaseRoles, client.InNamespace(secret.Namespace)); err != nil {
+			log.FromContext(ctx).Error(err, "while getting DatabaseRole list", "namespace", secret.Namespace)
+			return requests
+		}
+
+		return append(requests, filterClustersWithDatabaseRoleUsingSecret(secret, databaseRoles.Items)...)
 	}
+}
+
+// filterClustersWithDatabaseRoleUsingSecret returns a reconcile.Request for the
+// cluster of every DatabaseRole whose password secret is the given secret.
+func filterClustersWithDatabaseRoleUsingSecret(
+	secret *corev1.Secret,
+	databaseRoles []apiv1.DatabaseRole,
+) (requests []reconcile.Request) {
+	for i := range databaseRoles {
+		role := &databaseRoles[i]
+		if role.Spec.DisablePassword || role.Spec.PasswordSecret == nil {
+			continue
+		}
+		if role.Spec.GetRoleSecretName() != secret.Name {
+			continue
+		}
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      role.Spec.ClusterRef.Name,
+				Namespace: secret.Namespace,
+			},
+		})
+	}
+	return requests
 }
 
 func (r *ClusterReconciler) getClustersForSecretsOrConfigMapsToClustersMapper(

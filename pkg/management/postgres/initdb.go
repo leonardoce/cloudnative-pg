@@ -45,7 +45,6 @@ import (
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	pluginClient "github.com/cloudnative-pg/cloudnative-pg/internal/cnpi/plugin/client"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/configfile"
-	"github.com/cloudnative-pg/cloudnative-pg/pkg/management"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/external"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/postgres/constants"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/postgres/logicalimport"
@@ -471,12 +470,7 @@ func (info InitInfo) executeQueries(sqlUser *sql.DB, queries []string) error {
 }
 
 // Bootstrap creates and configures this new PostgreSQL instance
-func (info InitInfo) Bootstrap(ctx context.Context) error {
-	typedClient, err := management.NewControllerRuntimeClient()
-	if err != nil {
-		return err
-	}
-
+func (info InitInfo) Bootstrap(ctx context.Context, typedClient ctrl.Client) error {
 	cluster, err := info.loadCluster(ctx, typedClient)
 	if err != nil {
 		return err

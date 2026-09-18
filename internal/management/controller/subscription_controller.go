@@ -31,7 +31,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -218,11 +217,11 @@ func (r *SubscriptionReconciler) evaluateDropSubscription(ctx context.Context, s
 
 // NewSubscriptionReconciler creates a new subscription reconciler
 func NewSubscriptionReconciler(
-	mgr manager.Manager,
+	cli client.Client,
 	instance *postgres.Instance,
 ) *SubscriptionReconciler {
 	sr := &SubscriptionReconciler{
-		Client:   mgr.GetClient(),
+		Client:   cli,
 		instance: instance,
 		getDB: func(name string) (*sql.DB, error) {
 			return instance.ConnectionPool().Connection(name)
@@ -233,7 +232,7 @@ func NewSubscriptionReconciler(
 		},
 	}
 	sr.finalizerReconciler = newFinalizerReconciler(
-		mgr.GetClient(),
+		cli,
 		utils.SubscriptionFinalizerName,
 		sr.evaluateDropSubscription,
 	)

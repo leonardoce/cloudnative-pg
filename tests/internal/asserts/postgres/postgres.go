@@ -55,7 +55,7 @@ type TableLocator struct {
 }
 
 // AssertConnection opens a forwarded psql connection to a service, asserting
-// that a basic SELECT 1 succeeds within RetryTimeout.
+// that a basic SELECT 1 succeeds within timeout (in seconds).
 func AssertConnection(
 	env *environment.TestingEnvironment,
 	namespace string,
@@ -63,6 +63,7 @@ func AssertConnection(
 	dbname string,
 	user string,
 	password string,
+	timeout int,
 ) {
 	GinkgoHelper()
 	By(fmt.Sprintf("connecting to the %v service as %v", service, user), func() {
@@ -82,7 +83,7 @@ func AssertConnection(
 			err = row.Scan(&rawValue)
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(strings.TrimSpace(rawValue)).To(BeEquivalentTo("1"))
-		}, environment.RetryTimeout).Should(Succeed())
+		}, timeout).Should(Succeed())
 	})
 }
 
@@ -403,6 +404,6 @@ func AssertApplicationDatabaseConnection(
 		}
 		rwService := services.GetReadWriteServiceName(clusterName)
 
-		AssertConnection(env, namespace, rwService, appDB, appUser, appPassword)
+		AssertConnection(env, namespace, rwService, appDB, appUser, appPassword, environment.RetryTimeout)
 	})
 }

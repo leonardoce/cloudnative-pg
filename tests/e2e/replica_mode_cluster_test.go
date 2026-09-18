@@ -319,7 +319,7 @@ var _ = Describe("Replica Mode", Label(tests.LabelReplication), func() {
 						"SELECT 1;",
 					)
 					return err
-				}, testTimeouts[timeouts.Short]).Should(Succeed())
+				}, 30, 3).Should(Succeed())
 				pgasserts.AssertCreateTestData(env, tableLocator)
 			})
 

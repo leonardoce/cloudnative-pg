@@ -79,7 +79,8 @@ var _ = Describe("Update user and superuser password", Label(tests.LabelServiceC
 			const newPassword = "eeh2Zahohx"
 
 			secretsasserts.AssertUpdateSecret(env, namespace, clusterName, appSecretName, "password", newPassword, 30)
-			pgasserts.AssertConnection(env, namespace, rwService, postgres.AppDBName, postgres.AppUser, newPassword)
+			pgasserts.AssertConnection(env, namespace, rwService, postgres.AppDBName, postgres.AppUser, newPassword,
+				SecretMountSyncTimeout)
 		})
 
 		By("fail updating user application password with wrong user in secret", func() {
@@ -123,7 +124,8 @@ var _ = Describe("Update user and superuser password", Label(tests.LabelServiceC
 
 			const newPassword = "fi6uCae7"
 			secretsasserts.AssertUpdateSecret(env, namespace, clusterName, superUserSecretName, "password", newPassword, 30)
-			pgasserts.AssertConnection(env, namespace, rwService, postgres.PostgresDBName, postgres.PostgresUser, newPassword)
+			pgasserts.AssertConnection(env, namespace, rwService, postgres.PostgresDBName, postgres.PostgresUser, newPassword,
+				SecretMountSyncTimeout)
 		})
 	})
 })
@@ -208,7 +210,8 @@ var _ = Describe("Enable superuser password", Label(tests.LabelServiceConnectivi
 				clusterName, namespace, apiv1.SuperUserSecretSuffix,
 			)
 			Expect(err).ToNot(HaveOccurred())
-			pgasserts.AssertConnection(env, namespace, rwService, postgres.PostgresDBName, superUser, superUserPass)
+			pgasserts.AssertConnection(env, namespace, rwService, postgres.PostgresDBName, superUser, superUserPass,
+				SecretMountSyncTimeout)
 		})
 
 		By("disable superuser access", func() {
@@ -250,7 +253,8 @@ var _ = Describe("Enable superuser password", Label(tests.LabelServiceConnectivi
 		passwdNullQuery := "SELECT passwd IS NULL FROM pg_catalog.pg_shadow WHERE usename='postgres'"
 
 		By("connecting as superuser with the user-supplied password", func() {
-			pgasserts.AssertConnection(env, namespace, rwService, postgres.PostgresDBName, superuserName, superuserPass)
+			pgasserts.AssertConnection(env, namespace, rwService, postgres.PostgresDBName, superuserName, superuserPass,
+				RetryTimeout)
 		})
 
 		By("disabling superuser access and waiting for pg_shadow.passwd to become NULL", func() {
@@ -313,7 +317,8 @@ var _ = Describe("Enable superuser password", Label(tests.LabelServiceConnectivi
 		})
 
 		By("connecting as superuser again with the user-supplied password", func() {
-			pgasserts.AssertConnection(env, namespace, rwService, postgres.PostgresDBName, superuserName, superuserPass)
+			pgasserts.AssertConnection(env, namespace, rwService, postgres.PostgresDBName, superuserName, superuserPass,
+				RetryTimeout)
 		})
 	})
 })

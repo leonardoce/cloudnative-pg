@@ -40,13 +40,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	ctrlconfig "sigs.k8s.io/controller-runtime/pkg/config"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/cmd/manager/instance/run/lease"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/cmd/manager/instance/run/lifecycle"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/cnpi/plugin/repository"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/configuration"
+	"github.com/cloudnative-pg/cloudnative-pg/internal/management/bundleclient"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/management/controller"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/management/controller/externalservers"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/management/controller/roles"
@@ -260,17 +265,27 @@ func runSubCommand( //nolint: gocyclo,gocognit
 
 	leaseRunnable := lease.New(kubeClientset, instance)
 
+	// bundleAwareClient serves Secret/ConfigMap Get calls from the operator-built
+	// secrets bundle mounted on disk instead of the Kubernetes API, so it's what
+	// every reconciler and runnable below is given instead of mgr.GetClient().
+	bundleAwareClient := bundleclient.NewClient(mgr.GetClient())
+
 	metricsExporter := metricserver.NewExporter(instance, metrics.NewPluginCollector(pluginRepository))
 	reconciler := controller.NewInstanceReconciler(
 		instance,
-		mgr.GetClient(),
+		bundleAwareClient,
 		metricsExporter,
 		pluginRepository,
 		leaseRunnable,
 		webhookv1.NewClusterAdmissionGuard(),
 	)
+	// secretsBundleEvents feeds a Reconcile() whenever the operator updates the
+	// secrets bundle mounted on disk, since the instance manager has no RBAC
+	// left to watch Secrets/ConfigMaps directly.
+	secretsBundleEvents := make(chan event.GenericEvent)
 	err = ctrl.NewControllerManagedBy(mgr).
 		For(&apiv1.Cluster{}).
+		WatchesRawSource(source.Channel(secretsBundleEvents, &handler.EnqueueRequestForObject{})).
 		Named("instance-cluster").
 		Complete(reconciler)
 	if err != nil {
@@ -279,9 +294,16 @@ func runSubCommand( //nolint: gocyclo,gocognit
 	}
 	postgresStartConditions = append(postgresStartConditions, reconciler.GetInitializedCondition())
 
+	if err := mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		return watchSecretsBundleDirectory(ctx, instance, secretsBundleEvents)
+	})); err != nil {
+		contextLogger.Error(err, "unable to add secrets bundle watcher")
+		return err
+	}
+
 	// database reconciler
 	dbReconciler := controller.NewDatabaseReconciler(
-		mgr,
+		bundleAwareClient,
 		instance,
 		webhookv1.NewDatabaseAdmissionGuard(),
 	)
@@ -291,21 +313,21 @@ func runSubCommand( //nolint: gocyclo,gocognit
 	}
 
 	// database publication reconciler
-	publicationReconciler := controller.NewPublicationReconciler(mgr, instance)
+	publicationReconciler := controller.NewPublicationReconciler(bundleAwareClient, instance)
 	if err := publicationReconciler.SetupWithManager(mgr); err != nil {
 		contextLogger.Error(err, "unable to create publication controller")
 		return err
 	}
 
 	// database subscription reconciler
-	subscriptionReconciler := controller.NewSubscriptionReconciler(mgr, instance)
+	subscriptionReconciler := controller.NewSubscriptionReconciler(bundleAwareClient, instance)
 	if err := subscriptionReconciler.SetupWithManager(mgr); err != nil {
 		contextLogger.Error(err, "unable to create subscription controller")
 		return err
 	}
 
 	// role reconciler
-	roleReconciler := controller.NewDatabaseRoleReconciler(mgr, instance)
+	roleReconciler := controller.NewDatabaseRoleReconciler(bundleAwareClient, instance)
 	if err := roleReconciler.SetupWithManager(mgr); err != nil {
 		contextLogger.Error(err, "unable to create role controller")
 		return err
@@ -398,7 +420,7 @@ func runSubCommand( //nolint: gocyclo,gocognit
 		}
 	}()
 
-	remoteSrv, err := webserver.NewRemoteWebServer(instance, onlineUpgradeCancelFunc, exitedConditions)
+	remoteSrv, err := webserver.NewRemoteWebServer(instance, onlineUpgradeCancelFunc, exitedConditions, bundleAwareClient)
 	if err != nil {
 		contextLogger.Error(err, "unable to create remote webserver runnable")
 		return err
@@ -410,7 +432,7 @@ func runSubCommand( //nolint: gocyclo,gocognit
 
 	localSrv, err := webserver.NewLocalWebServer(
 		instance,
-		mgr.GetClient(),
+		bundleAwareClient,
 		mgr.GetEventRecorderFor("local-webserver"), //nolint:staticcheck
 	)
 	if err != nil {
@@ -433,14 +455,14 @@ func runSubCommand( //nolint: gocyclo,gocognit
 	}
 
 	contextLogger.Info("starting tablespace manager")
-	if err := tablespaces.NewTablespaceReconciler(instance, mgr.GetClient()).
+	if err := tablespaces.NewTablespaceReconciler(instance, bundleAwareClient).
 		SetupWithManager(mgr); err != nil {
 		contextLogger.Error(err, "unable to create tablespace reconciler")
 		return err
 	}
 
 	contextLogger.Info("starting external server manager")
-	if err := externalservers.NewReconciler(instance, mgr.GetClient()).
+	if err := externalservers.NewReconciler(instance, bundleAwareClient).
 		SetupWithManager(mgr); err != nil {
 		contextLogger.Error(err, "unable to create external servers reconciler")
 		return err

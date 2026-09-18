@@ -36,6 +36,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/cloudnative-pg/cloudnative-pg/internal/management/bundleclient"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/management/istio"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/management/linkerd"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/scheme"
@@ -72,10 +73,14 @@ func NewCmd() *cobra.Command {
 				return err
 			}
 
+			// bundleAwareClient serves Secret/ConfigMap Get calls from the operator-built
+			// secrets bundle mounted on disk instead of the Kubernetes API.
+			bundleAwareClient := bundleclient.NewClient(mgr.GetClient())
+
 			// Step 1.1: add the local webserver to the manager
 			localSrv, err := webserver.NewLocalWebServer(
 				postgres.NewInstance().WithClusterName(clusterName).WithNamespace(namespace),
-				mgr.GetClient(),
+				bundleAwareClient,
 				mgr.GetEventRecorderFor("local-webserver"), //nolint:staticcheck
 			)
 			if err != nil {
@@ -88,7 +93,7 @@ func NewCmd() *cobra.Command {
 
 			// Step 2: add the restore process to the manager
 			restoreProcess := restoreRunnable{
-				cli:         mgr.GetClient(),
+				cli:         bundleAwareClient,
 				clusterName: clusterName,
 				namespace:   namespace,
 				pgData:      pgData,

@@ -545,7 +545,8 @@ var _ = Describe("Declarative role management", Label(tests.LabelSmoke, tests.La
 
 				By("checking if we can connect to PostgreSQL using specified password", func() {
 					rwService := services.GetReadWriteServiceName(clusterName)
-					pgasserts.AssertConnection(env, namespace, rwService, postgres.PostgresDBName, pgRoleName, initialPassword)
+					pgasserts.AssertConnection(env, namespace, rwService, postgres.PostgresDBName, pgRoleName, initialPassword,
+						RetryTimeout)
 				})
 
 				By("changing the password in the secret", func() {
@@ -563,7 +564,8 @@ var _ = Describe("Declarative role management", Label(tests.LabelSmoke, tests.La
 
 				By("checking if we can connect to PostgreSQL using the new password", func() {
 					rwService := services.GetReadWriteServiceName(clusterName)
-					pgasserts.AssertConnection(env, namespace, rwService, postgres.PostgresDBName, pgRoleName, newPassword)
+					pgasserts.AssertConnection(env, namespace, rwService, postgres.PostgresDBName, pgRoleName, newPassword,
+						SecretMountSyncTimeout)
 				})
 			})
 		})

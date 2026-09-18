@@ -29,6 +29,7 @@ import (
 	"github.com/spf13/cobra"
 	ctrl "sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/cloudnative-pg/cloudnative-pg/internal/management/bundleclient"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/management/istio"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/management/linkerd"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management"
@@ -158,7 +159,14 @@ func initSubCommand(ctx context.Context, info postgres.InitInfo) error {
 		return err
 	}
 
-	err = info.Bootstrap(ctx)
+	rawClient, err := management.NewControllerRuntimeClient()
+	if err != nil {
+		contextLogger.Error(err, "Error creating Kubernetes client")
+		return err
+	}
+	client := bundleclient.NewClient(rawClient)
+
+	err = info.Bootstrap(ctx, client)
 	if err != nil {
 		contextLogger.Error(err, "Error while bootstrapping data directory")
 		return err

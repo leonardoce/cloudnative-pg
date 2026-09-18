@@ -52,32 +52,6 @@ func CreateRole(opts RoleOptions) rbacv1.Role {
 	rules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{
-				"",
-			},
-			Resources: []string{
-				"configmaps",
-			},
-			Verbs: []string{
-				"get",
-				"watch",
-			},
-			ResourceNames: getInvolvedConfigMapNames(opts.Cluster),
-		},
-		{
-			APIGroups: []string{
-				"",
-			},
-			Resources: []string{
-				"secrets",
-			},
-			Verbs: []string{
-				"get",
-				"watch",
-			},
-			ResourceNames: getInvolvedSecretNames(opts),
-		},
-		{
-			APIGroups: []string{
 				apiv1.SchemeGroupVersion.Group,
 			},
 			Resources: []string{
@@ -321,7 +295,10 @@ func CreateRole(opts RoleOptions) rbacv1.Role {
 	}
 }
 
-func getInvolvedSecretNames(opts RoleOptions) []string {
+// GetInvolvedSecretNames returns the deduplicated, sorted list of Secret
+// names referenced by the Cluster (directly, or through the backup origin
+// and CRD roles carried in opts) that the instance manager needs access to.
+func GetInvolvedSecretNames(opts RoleOptions) []string {
 	involvedSecretNames := []string{
 		opts.Cluster.GetReplicationSecretName(),
 		opts.Cluster.GetClientCASecretName(),
@@ -351,7 +328,10 @@ func getInvolvedSecretNames(opts RoleOptions) []string {
 	return cleanupResourceList(involvedSecretNames)
 }
 
-func getInvolvedConfigMapNames(cluster *apiv1.Cluster) []string {
+// GetInvolvedConfigMapNames returns the deduplicated, sorted list of
+// ConfigMap names referenced by the Cluster that the instance manager needs
+// access to.
+func GetInvolvedConfigMapNames(cluster *apiv1.Cluster) []string {
 	involvedConfigMapNames := []string{
 		cluster.Name,
 	}

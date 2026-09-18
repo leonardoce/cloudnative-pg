@@ -31,7 +31,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -245,12 +244,12 @@ func (r *DatabaseReconciler) evaluateDropDatabase(ctx context.Context, db *apiv1
 
 // NewDatabaseReconciler creates a new database reconciler
 func NewDatabaseReconciler(
-	mgr manager.Manager,
+	cli client.Client,
 	instance *postgres.Instance,
 	admission *guard.Admission[*apiv1.Database],
 ) *DatabaseReconciler {
 	dr := &DatabaseReconciler{
-		Client:    mgr.GetClient(),
+		Client:    cli,
 		instance:  instance,
 		admission: admission,
 		getSuperUserDB: func() (*sql.DB, error) {
@@ -262,7 +261,7 @@ func NewDatabaseReconciler(
 	}
 
 	dr.finalizerReconciler = newFinalizerReconciler(
-		mgr.GetClient(),
+		cli,
 		utils.DatabaseFinalizerName,
 		dr.evaluateDropDatabase,
 	)

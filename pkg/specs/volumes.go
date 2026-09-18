@@ -53,6 +53,9 @@ const PgTablespaceVolumePath = "/var/lib/postgresql/tablespaces"
 // pgdataVolumeName is the name of the PGDATA volume
 const pgdataVolumeName = "pgdata"
 
+// secretsBundleVolumeName is the name of the volume mounting the secrets bundle
+const secretsBundleVolumeName = "secrets-bundle"
+
 // MountForTablespace returns the normalized tablespace volume name for a given
 // tablespace, on a cluster pod
 func MountForTablespace(tablespaceName string) string {
@@ -167,9 +170,27 @@ func createPostgresVolumes(
 
 	result = append(result, createKubeAPIAccessVolume())
 
+	result = append(result, createSecretsBundleVolume(cluster))
+
 	result = append(result, CreateExtensionVolumes(extensions)...)
 
 	return result
+}
+
+// createSecretsBundleVolume creates the volume mounting the Secret that
+// bundles every Secret/ConfigMap the instance manager needs. It is mounted
+// with no Items filter: kubelet then projects whatever keys currently exist
+// in the bundle, so the Pod spec never needs to change again when the set
+// of bundled secrets changes.
+func createSecretsBundleVolume(cluster *apiv1.Cluster) corev1.Volume {
+	return corev1.Volume{
+		Name: secretsBundleVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: GetSecretsBundleName(cluster.Name),
+			},
+		},
+	}
 }
 
 func createVolumesAndVolumeMountsForSQLRefs(
@@ -309,6 +330,14 @@ func CreatePostgresVolumeMounts(cfg VolumeMountsConfig) []corev1.VolumeMount {
 			},
 		)
 	}
+
+	volumeMounts = append(volumeMounts,
+		corev1.VolumeMount{
+			Name:      secretsBundleVolumeName,
+			MountPath: SecretsBundleDirectory,
+			ReadOnly:  true,
+		},
+	)
 
 	// we should create volumeMounts in fixed sequence as podSpec will store it in annotation and
 	// later it will be  retrieved to do deepEquals

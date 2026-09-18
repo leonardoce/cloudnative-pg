@@ -28,6 +28,7 @@ import (
 	"github.com/spf13/cobra"
 	ctrl "sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/cloudnative-pg/cloudnative-pg/internal/management/bundleclient"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/management/istio"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/management/linkerd"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management"
@@ -94,11 +95,12 @@ func joinSubCommand(ctx context.Context, instance *postgres.Instance, info postg
 		return err
 	}
 
-	client, err := management.NewControllerRuntimeClient()
+	rawClient, err := management.NewControllerRuntimeClient()
 	if err != nil {
 		contextLogger.Error(err, "Error creating Kubernetes client")
 		return err
 	}
+	client := bundleclient.NewClient(rawClient)
 
 	// Bootstrap starts as soon as the Pod does, often before the operator
 	// writes the certificate status. Use the Cluster this call returns; see

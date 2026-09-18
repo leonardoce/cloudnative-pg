@@ -35,7 +35,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -414,11 +413,11 @@ func (r *DatabaseRoleReconciler) succeededReconciliation(
 
 // NewDatabaseRoleReconciler creates a new role reconciler
 func NewDatabaseRoleReconciler(
-	mgr manager.Manager,
+	cli client.Client,
 	instance *postgres.Instance,
 ) *DatabaseRoleReconciler {
 	return &DatabaseRoleReconciler{
-		Client:   mgr.GetClient(),
+		Client:   cli,
 		instance: instance,
 	}
 }

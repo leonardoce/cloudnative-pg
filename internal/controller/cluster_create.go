@@ -64,6 +64,11 @@ func (r *ClusterReconciler) createPostgresClusterObjects(ctx context.Context, cl
 		return err
 	}
 
+	err = r.reconcileBundle(ctx, cluster)
+	if err != nil {
+		return err
+	}
+
 	err = r.reconcilePostgresServices(ctx, cluster)
 	if err != nil {
 		return err
@@ -747,12 +752,15 @@ func (r *ClusterReconciler) copyPullSecretFromOperator(ctx context.Context, clus
 	return clusterSecretName, nil
 }
 
-// createOrPatchRole ensures that the required role for the instance manager exists and
-// contains the right rules
-func (r *ClusterReconciler) createOrPatchRole(ctx context.Context, cluster *apiv1.Cluster) error {
+// buildRoleOptions gathers the backup origin and the CRD roles associated
+// with the Cluster, needed both to compute the instance manager Role and to
+// build the secrets bundle (they share the same "which secrets are involved"
+// enumeration, see specs.GetInvolvedSecretNames) — kept as a single helper so
+// the two stay in sync by construction rather than by convention.
+func (r *ClusterReconciler) buildRoleOptions(ctx context.Context, cluster *apiv1.Cluster) (specs.RoleOptions, error) {
 	originBackup, err := r.getOriginBackup(ctx, cluster)
 	if err != nil {
-		return err
+		return specs.RoleOptions{}, err
 	}
 
 	// List all the PG roles that will be reconciled by the primary
@@ -769,7 +777,22 @@ func (r *ClusterReconciler) createOrPatchRole(ctx context.Context, cluster *apiv
 			databaseRoleClusterKey: cluster.Name,
 		},
 	); err != nil {
-		return fmt.Errorf("while listing database roles: %w", err)
+		return specs.RoleOptions{}, fmt.Errorf("while listing database roles: %w", err)
+	}
+
+	return specs.RoleOptions{
+		Cluster:      cluster,
+		BackupOrigin: originBackup,
+		Roles:        roleList.Items,
+	}, nil
+}
+
+// createOrPatchRole ensures that the required role for the instance manager exists and
+// contains the right rules
+func (r *ClusterReconciler) createOrPatchRole(ctx context.Context, cluster *apiv1.Cluster) error {
+	roleOptions, err := r.buildRoleOptions(ctx, cluster)
+	if err != nil {
+		return err
 	}
 
 	var role rbacv1.Role
@@ -779,16 +802,10 @@ func (r *ClusterReconciler) createOrPatchRole(ctx context.Context, cluster *apiv
 		}
 
 		r.Recorder.Event(cluster, "Normal", "CreatingRole", "Creating Cluster Role")
-		return r.createRole(ctx, cluster, originBackup, roleList.Items)
+		return r.createRole(ctx, cluster, roleOptions.BackupOrigin, roleOptions.Roles)
 	}
 
-	generatedRole := specs.CreateRole(
-		specs.RoleOptions{
-			Cluster:      cluster,
-			BackupOrigin: originBackup,
-			Roles:        roleList.Items,
-		},
-	)
+	generatedRole := specs.CreateRole(roleOptions)
 	if equality.Semantic.DeepEqual(generatedRole.Rules, role.Rules) {
 		// Everything fine, the two rules have the same content
 		return nil

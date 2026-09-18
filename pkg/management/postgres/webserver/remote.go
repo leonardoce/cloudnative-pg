@@ -43,7 +43,6 @@ import (
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/certs"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/concurrency"
-	"github.com/cloudnative-pg/cloudnative-pg/pkg/management"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/postgres"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/postgres/constants"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/postgres/webserver/probes"
@@ -138,12 +137,8 @@ func NewRemoteWebServer(
 	instance *postgres.Instance,
 	cancelFunc context.CancelFunc,
 	exitedConditions concurrency.MultipleExecuted,
+	typedClient client.Client,
 ) (*Webserver, error) {
-	typedClient, err := management.NewControllerRuntimeClient()
-	if err != nil {
-		return nil, fmt.Errorf("creating controller-runtine client: %v", err)
-	}
-
 	// Create a shared cache for all probe types to reduce memory usage and ensure consistency
 	sharedCache := probes.NewClusterCache(
 		typedClient,

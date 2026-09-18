@@ -341,7 +341,8 @@ func DeleteTableUsingPgBouncerService(
 		clusterName, namespace, apiv1.ApplicationUserSecretSuffix,
 	)
 	Expect(err).ToNot(HaveOccurred())
-	pgasserts.AssertConnection(env, namespace, poolerService, pgutils.AppDBName, appUser, generatedAppUserPassword)
+	pgasserts.AssertConnection(env, namespace, poolerService, pgutils.AppDBName, appUser, generatedAppUserPassword,
+		environment.RetryTimeout)
 
 	connectionTimeout := time.Second * 10
 	dsn := services.CreateDSN(poolerService, appUser, pgutils.AppDBName, generatedAppUserPassword,

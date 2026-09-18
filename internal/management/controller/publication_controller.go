@@ -31,7 +31,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -211,11 +210,11 @@ func (r *PublicationReconciler) evaluateDropPublication(ctx context.Context, pub
 
 // NewPublicationReconciler creates a new publication reconciler
 func NewPublicationReconciler(
-	mgr manager.Manager,
+	cli client.Client,
 	instance *postgres.Instance,
 ) *PublicationReconciler {
 	pr := &PublicationReconciler{
-		Client:   mgr.GetClient(),
+		Client:   cli,
 		instance: instance,
 		getDB: func(name string) (*sql.DB, error) {
 			return instance.ConnectionPool().Connection(name)
@@ -223,7 +222,7 @@ func NewPublicationReconciler(
 	}
 
 	pr.finalizerReconciler = newFinalizerReconciler(
-		mgr.GetClient(),
+		cli,
 		utils.PublicationFinalizerName,
 		pr.evaluateDropPublication,
 	)

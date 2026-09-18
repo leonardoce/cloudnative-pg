@@ -47,6 +47,7 @@ import (
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	pluginClient "github.com/cloudnative-pg/cloudnative-pg/internal/cnpi/plugin/client"
+	"github.com/cloudnative-pg/cloudnative-pg/internal/management/bundleclient"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/management/istio"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/management/linkerd"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/configfile"
@@ -148,11 +149,12 @@ type upgradeInfo struct {
 func (ui upgradeInfo) upgradeSubCommand(ctx context.Context, instance *postgres.Instance) error {
 	contextLogger := log.FromContext(ctx)
 
-	client, err := management.NewControllerRuntimeClient()
+	rawClient, err := management.NewControllerRuntimeClient()
 	if err != nil {
 		contextLogger.Error(err, "Error creating Kubernetes client")
 		return err
 	}
+	client := bundleclient.NewClient(rawClient)
 
 	clusterObjectKey := ctrl.ObjectKey{Name: instance.GetClusterName(), Namespace: instance.GetNamespaceName()}
 

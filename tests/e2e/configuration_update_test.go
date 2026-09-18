@@ -318,7 +318,8 @@ var _ = Describe("Configuration update", Label(tests.LabelClusterMetadata), func
 						RetryTimeout).Should(Succeed())
 				}
 				// The connection should now work
-				pgasserts.AssertConnection(env, namespace, endpointName, postgres.PostgresDBName, postgres.PostgresDBName, "")
+				pgasserts.AssertConnection(env, namespace, endpointName, postgres.PostgresDBName, postgres.PostgresDBName, "",
+					RetryTimeout)
 			})
 		})
 

@@ -21,7 +21,6 @@ package specs
 
 import (
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -168,15 +167,20 @@ var _ = Describe("Roles", func() {
 		serviceAccount := CreateRole(RoleOptions{Cluster: cluster})
 		Expect(serviceAccount.Name).To(Equal(cluster.Name))
 		Expect(serviceAccount.Namespace).To(Equal(cluster.Namespace))
-		Expect(serviceAccount.Rules).To(HaveLen(18))
+		Expect(serviceAccount.Rules).To(HaveLen(16))
+	})
+
+	It("does not grant any RBAC on secrets or configmaps: they're only read from the mounted bundle", func() {
+		serviceAccount := CreateRole(RoleOptions{Cluster: cluster, BackupOrigin: backupOrigin})
+		for _, rule := range serviceAccount.Rules {
+			Expect(rule.Resources).NotTo(ContainElement("secrets"))
+			Expect(rule.Resources).NotTo(ContainElement("configmaps"))
+		}
 	})
 
 	It("should contain every secret of the origin backup and backup configuration of every external cluster", func() {
-		serviceAccount := CreateRole(RoleOptions{Cluster: cluster, BackupOrigin: backupOrigin})
-		Expect(serviceAccount.Name).To(Equal(cluster.Name))
-		Expect(serviceAccount.Namespace).To(Equal(cluster.Namespace))
-		Expect(serviceAccount.Rules[0].ResourceNames).To(ConsistOf("thisTest", "testConfigMapKeySelector"))
-		Expect(serviceAccount.Rules[1].ResourceNames).To(ConsistOf(
+		Expect(GetInvolvedConfigMapNames(cluster)).To(ConsistOf("thisTest", "testConfigMapKeySelector"))
+		Expect(GetInvolvedSecretNames(RoleOptions{Cluster: cluster, BackupOrigin: backupOrigin})).To(ConsistOf(
 			"testReplicationTLSSecret",
 			"testClientCASecret",
 			"testServerCASecret",
@@ -292,7 +296,7 @@ var _ = Describe("Secrets", func() {
 	})
 
 	It("should contain default secrets only", func() {
-		Expect(getInvolvedSecretNames(RoleOptions{Cluster: cluster})).To(Equal([]string{
+		Expect(GetInvolvedSecretNames(RoleOptions{Cluster: cluster})).To(Equal([]string{
 			"thisTest-app",
 			"thisTest-ca",
 			"thisTest-replication",
@@ -302,7 +306,7 @@ var _ = Describe("Secrets", func() {
 	})
 
 	It("should created an ordered string list with the backup secrets", func() {
-		Expect(getInvolvedSecretNames(RoleOptions{Cluster: cluster, BackupOrigin: backup})).To(Equal([]string{
+		Expect(GetInvolvedSecretNames(RoleOptions{Cluster: cluster, BackupOrigin: backup})).To(Equal([]string{
 			"aws-status-secret-test",
 			"azure-storage-key-secret-test",
 			"backup-origin-endpoint-ca-test",
@@ -330,7 +334,7 @@ var _ = Describe("Secrets", func() {
 			},
 		}
 
-		Expect(getInvolvedSecretNames(RoleOptions{Cluster: cluster})).To(
+		Expect(GetInvolvedSecretNames(RoleOptions{Cluster: cluster})).To(
 			ContainElement("recovery-backup-endpoint-ca-test"))
 	})
 })
@@ -399,13 +403,8 @@ var _ = Describe("Database Roles", func() {
 		serviceAccount := CreateRole(RoleOptions{Cluster: cluster, Roles: crdRoles})
 		Expect(serviceAccount.Name).To(Equal(cluster.Name))
 		Expect(serviceAccount.Namespace).To(Equal(cluster.Namespace))
-		var secretsPolicy rbacv1.PolicyRule
-		for _, policy := range serviceAccount.Rules {
-			if len(policy.Resources) > 0 && policy.Resources[0] == "secrets" {
-				secretsPolicy = policy
-			}
-		}
-		Expect(secretsPolicy.ResourceNames).To(ContainElements("my_secret1", "my_secret3", "my_secret5"))
+		Expect(GetInvolvedSecretNames(RoleOptions{Cluster: cluster, Roles: crdRoles})).
+			To(ContainElements("my_secret1", "my_secret3", "my_secret5"))
 	})
 })
 

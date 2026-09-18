@@ -32,6 +32,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/cloudnative-pg/cloudnative-pg/internal/management/bundleclient"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/management/istio"
 	"github.com/cloudnative-pg/cloudnative-pg/internal/management/linkerd"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management"
@@ -67,10 +68,11 @@ func NewCmd() *cobra.Command {
 			ctx := cmd.Context()
 			contextLogger := log.FromContext(ctx)
 
-			client, err := management.NewControllerRuntimeClient()
+			rawClient, err := management.NewControllerRuntimeClient()
 			if err != nil {
 				return err
 			}
+			client := bundleclient.NewClient(rawClient)
 
 			env := CloneInfo{
 				info: &postgres.InitInfo{

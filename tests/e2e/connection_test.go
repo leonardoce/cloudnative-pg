@@ -66,7 +66,8 @@ var _ = Describe("Connection via services", Label(tests.LabelServiceConnectivity
 		roService := fmt.Sprintf("%v-ro", clusterName)
 		services := []string{rwService, roService, rService}
 		for _, service := range services {
-			pgasserts.AssertConnection(env, namespace, service, appDBName, postgres.PostgresDBName, superuserPassword)
+			pgasserts.AssertConnection(env, namespace, service, appDBName, postgres.PostgresDBName, superuserPassword,
+				environment.RetryTimeout)
 		}
 
 		replicationasserts.AssertWritesToReplicaFails(env, namespace, roService, appDBName, appDBUser, appPassword)

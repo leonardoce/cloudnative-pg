@@ -62,6 +62,16 @@ const (
 	fixturesDir  = "./fixtures"
 	RetryTimeout = environment.RetryTimeout
 	PollingTime  = objects.PollingTime
+
+	// SecretMountSyncTimeout is the timeout to use when asserting something
+	// that depends on a Secret change reaching the instance manager: the
+	// operator picks up the source Secret change near-instantly, but the
+	// instance manager only reads it from the secrets bundle mounted in the
+	// Pod, and kubelet's own resync of that mount is not push-based - it can
+	// take well over RetryTimeout (60s), especially on a busy cluster. A
+	// prior run observed the mount still stale after 3 minutes, so this
+	// carries extra headroom past that.
+	SecretMountSyncTimeout = 300
 )
 
 var (

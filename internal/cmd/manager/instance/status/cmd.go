@@ -32,6 +32,7 @@ import (
 	"github.com/cloudnative-pg/machinery/pkg/log"
 	"github.com/spf13/cobra"
 
+	"github.com/cloudnative-pg/cloudnative-pg/internal/management/bundleclient"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/certs"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/management/postgres/webserver/client/common"
@@ -53,11 +54,12 @@ func NewCmd() *cobra.Command {
 
 func statusSubCommand(ctx context.Context) error {
 	contextLogger := log.FromContext(ctx)
-	cli, err := management.NewControllerRuntimeClient()
+	rawClient, err := management.NewControllerRuntimeClient()
 	if err != nil {
 		contextLogger.Error(err, "while building the controller runtime client")
 		return err
 	}
+	cli := bundleclient.NewClient(rawClient)
 
 	cluster, err := local.NewClient().Cache().GetCluster()
 	if err != nil {
