@@ -782,6 +782,33 @@ The operator does not validate these options, and certain flags may
 interfere with its intended functionality. Use with caution.
 :::
 
+#### Mapping tablespaces from the source
+
+If the source instance uses tablespaces, map each tablespace declared
+in `spec.tablespaces` to its location in the source instance with
+`tablespaceMapping`:
+
+```yaml
+spec:
+  tablespaces:
+    - name: data_ts
+      storage:
+        size: 1Gi
+  bootstrap:
+    pg_basebackup:
+      source: cluster-example
+      tablespaceMapping:
+        data_ts: /var/lib/postgresql/source-tablespaces/data_ts
+```
+
+Each key must match a tablespace declared in `spec.tablespaces`.
+
+:::warning
+Use `tablespaceMapping` with caution when the source cluster is not
+managed by CloudNativePG. The operator does not validate that the
+resulting tablespace layout will work correctly.
+:::
+
 #### Current limitations
 
 ##### Snapshot copy

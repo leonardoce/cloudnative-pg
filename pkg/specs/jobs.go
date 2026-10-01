@@ -21,6 +21,8 @@ package specs
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 
 	"github.com/cloudnative-pg/machinery/pkg/log"
 	"github.com/kballard/go-shellquote"
@@ -243,11 +245,22 @@ func BuildPrimaryBootstrapCommandViaPgBaseBackup(cluster apiv1.Cluster) *Instanc
 		"pgbasebackup",
 	)
 
-	if cluster.Spec.Bootstrap != nil && cluster.Spec.Bootstrap.PgBaseBackup != nil &&
-		len(cluster.Spec.Bootstrap.PgBaseBackup.AdditionalArgs) > 0 {
-		initCommand = append(initCommand,
-			"--pgbasebackup-additional-args",
-			shellquote.Join(cluster.Spec.Bootstrap.PgBaseBackup.AdditionalArgs...))
+	if cluster.Spec.Bootstrap != nil && cluster.Spec.Bootstrap.PgBaseBackup != nil {
+		pgBaseBackup := cluster.Spec.Bootstrap.PgBaseBackup
+		var pgBaseBackupArgs []string
+		for _, name := range slices.Sorted(maps.Keys(pgBaseBackup.TablespaceMapping)) {
+			pgBaseBackupArgs = append(pgBaseBackupArgs, fmt.Sprintf(
+				"--tablespace-mapping=%s=%s",
+				pgBaseBackup.TablespaceMapping[name],
+				LocationForTablespace(name),
+			))
+		}
+		pgBaseBackupArgs = append(pgBaseBackupArgs, pgBaseBackup.AdditionalArgs...)
+		if len(pgBaseBackupArgs) > 0 {
+			initCommand = append(initCommand,
+				"--pgbasebackup-additional-args",
+				shellquote.Join(pgBaseBackupArgs...))
+		}
 	}
 
 	initCommand = append(initCommand, commonFlags...)

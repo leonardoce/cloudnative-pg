@@ -648,6 +648,17 @@ func (v *ClusterCustomValidator) validateBootstrapPgBaseBackupSource(r *apiv1.Cl
 				fmt.Sprintf("External cluster %v not found", r.Spec.Bootstrap.PgBaseBackup.Source)))
 	}
 
+	for name := range r.Spec.Bootstrap.PgBaseBackup.TablespaceMapping {
+		if r.GetTablespaceConfiguration(name) == nil {
+			result = append(
+				result,
+				field.Invalid(
+					field.NewPath("spec", "bootstrap", "pg_basebackup", "tablespaceMapping").Key(name),
+					name,
+					fmt.Sprintf("Tablespace %v not declared in spec.tablespaces", name)))
+		}
+	}
+
 	return result
 }
 

@@ -1940,6 +1940,14 @@ spec:
                           a physical backup
                         minLength: 1
                         type: string
+                      tablespaceMapping:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          Maps a tablespace name declared in `spec.tablespaces` to the
+                          corresponding location in the source instance.
+                          Keys must be a subset of the tablespaces declared in `spec.tablespaces`.
+                        type: object
                     required:
                     - source
                     type: object

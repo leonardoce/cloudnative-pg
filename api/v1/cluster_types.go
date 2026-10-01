@@ -2273,6 +2273,12 @@ type BootstrapPgBaseBackup struct {
 	//
 	// +optional
 	AdditionalArgs []string `json:"additionalArgs,omitempty"`
+
+	// Maps a tablespace name declared in `spec.tablespaces` to the
+	// corresponding location in the source instance.
+	// Keys must be a subset of the tablespaces declared in `spec.tablespaces`.
+	// +optional
+	TablespaceMapping map[string]string `json:"tablespaceMapping,omitempty"`
 }
 
 // RecoveryTarget allows to configure the moment where the recovery process
