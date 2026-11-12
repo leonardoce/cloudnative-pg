@@ -1,9 +1,11 @@
 # TLA+ specifications.
 #
 # Targets:
-#   make check     re-translate every PlusCal spec and model-check all of
-#                  them with TLC
-#   make translate re-run the PlusCal translator on every spec
+#   make check     re-translate every PlusCal spec and run TLC on every
+#                  model: the PlusCal ones are model-checked, the examples of
+#                  the functional specifications are evaluated
+#   make translate re-run the PlusCal translator on every spec that has a
+#                  PlusCal algorithm
 #   make clean     remove TLC output directories and translator backups
 #
 # Requirements are handled automatically:
@@ -22,7 +24,11 @@ TLA_DOWNLOAD_URL = https://github.com/tlaplus/tlaplus/releases/download/$(TLA_VE
 TLA2TOOLS ?= $(HOME)/.cache/tlaplus/$(TLA_VERSION)/tla2tools.jar
 JAVA ?= java
 
-MODELS := $(basename $(wildcard */*.tla))
+# A model is what TLC runs, and it has a .cfg. A functional specification has
+# none: it has no behaviour to check. Its examples, in a module that extends it
+# (<Spec>Examples.tla), have an empty .cfg instead, and TLC just evaluates the
+# ASSUMEs of that module.
+MODELS := $(basename $(wildcard */*.cfg))
 
 .PHONY: all check translate clean check-java $(addprefix check-,$(MODELS))
 
@@ -38,6 +44,10 @@ $(addprefix check-,$(MODELS)): check-%: translate %.tla %.cfg
 
 translate: check-java $(TLA2TOOLS)
 	@for m in $(MODELS); do \
+		if ! grep -q -e '--algorithm' -e '--fair' $$m.tla; then \
+			echo "Skipping $$m.tla: no PlusCal algorithm"; \
+			continue; \
+		fi; \
 		echo "Translating $$m.tla"; \
 		$(JAVA) -cp "$(TLA2TOOLS)" pcal.trans -nocfg $$m.tla || exit 1; \
 	done
